@@ -1,26 +1,34 @@
 'use strict';
 
-import { WebSocketProvider } from 'ethers';
-import { config } from 'dotenv';
-config();
+import container from './container.js';
 
-const INFURA_WSS = process.env.INFURA_ETH_SEPOLIA_WSS;
-
-const provider = new WebSocketProvider(INFURA_WSS);
-
-provider.on('block', async (blockNumber) => {
-    console.log(`\n New block: ${blockNumber}`);
-
+// async IIFE to handle application startup and initialization
+(async () => {
+    let ethereumService;
     try {
-        const block = await provider.getBlock(blockNumber, true); // true = include transactions
+        ethereumService = container.resolve('ethereumService');
 
-        for (const txHash of block.transactions) {
-            const tx = await provider.getTransaction(txHash);
+        await ethereumService.initialize();
 
-            console.log(tx);
-            if (!tx) continue;
-        }
-    } catch (err) {
-        console.error(`Error fetching block ${blockNumber}:`, err);
+        await ethereumService.startMonitoring();
+
+        console.log('Ethereum Monitor application started successfully.');
+
+    } catch (error) {
+        console.error('Application failed to start:', error);
+        process.exit(1);
     }
-});
+
+    process.on('SIGINT', async () => {
+        console.log('\nShutting down gracefully...');
+        try {
+            // TODO: graceful shutdown for db and ws connection
+        } catch (error) {
+            console.error('Error during shutdown:', error);
+        } finally {
+            console.log('Exiting.');
+            process.exit(0);
+        }
+    });
+
+})();

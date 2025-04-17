@@ -11,6 +11,7 @@ class ConfigsController {
 
     // GET /configs/:id
     async getConfiguration(req, res, next) {
+        console.log('getConfiguration called');
         try {
             const id = parseInt(req.params.id, 10);
             if (isNaN(id)) {
@@ -28,6 +29,7 @@ class ConfigsController {
 
     // GET /configs
     async getConfigurations(req, res, next) {
+        console.log('getConfigurations called');
         try {
             const configs = await this.configsService.getConfigurations();
             res.json(configs);
@@ -38,6 +40,7 @@ class ConfigsController {
 
     // POST /configs
     async createConfiguration(req, res, next) {
+        console.log('createConfiguration called');
         try {
             // TODO: Add validation for req.body
             const newConfig = await this.configsService.createConfiguration(req.body);
@@ -52,6 +55,7 @@ class ConfigsController {
 
     // PUT /configs/:id
     async updateConfiguration(req, res, next) {
+        console.log('updateConfiguration called');
         try {
             const id = parseInt(req.params.id, 10);
             if (isNaN(id)) {
@@ -81,6 +85,7 @@ class ConfigsController {
 
     // DELETE /configs/:id
     async deleteConfiguration(req, res, next) {
+        console.log('deleteConfiguration called');
         try {
             const id = parseInt(req.params.id, 10);
             if (isNaN(id)) {
@@ -98,37 +103,6 @@ class ConfigsController {
             }
 
             res.status(204).send(); // No Content
-        } catch (error) {
-            next(error);
-        }
-    }
-
-    // POST /monitor/config/:id - Activate a specific config for monitoring
-    async setActiveMonitoringConfig(req, res, next) {
-        try {
-            const id = parseInt(req.params.id, 10);
-            if (isNaN(id)) {
-                return res.status(400).json({ error: 'Invalid configuration ID' });
-            }
-
-            const success = await this.ethereumService.setActiveConfigById(id);
-
-            if (!success) {
-                // setActiveConfigById logs warnings/errors, but we should still indicate failure
-                return res.status(404).json({ error: `Failed to activate configuration ${id}. It might not exist.` });
-            }
-
-            res.status(200).json({ message: `Monitoring activated for configuration ID: ${id}` });
-        } catch (error) {
-            next(error);
-        }
-    }
-
-    // DELETE /monitor/config - Deactivate monitoring config
-    async deactivateMonitoringConfig(req, res, next) {
-        try {
-            await this.ethereumService.setActiveConfigById(null);
-            res.status(200).json({ message: 'Monitoring configuration deactivated.' });
         } catch (error) {
             next(error);
         }

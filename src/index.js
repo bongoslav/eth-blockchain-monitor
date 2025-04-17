@@ -29,8 +29,6 @@ const PORT = process.env.PORT || 3000;
         });
 
         console.log('Ethereum Monitor application backend started successfully.');
-        console.log('Use API endpoints to manage configurations and activate monitoring.');
-
     } catch (error) {
         console.error('Application failed to start:', error);
         if (runningServer) {

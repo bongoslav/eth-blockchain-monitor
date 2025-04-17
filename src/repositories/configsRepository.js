@@ -1,38 +1,43 @@
 'use strict';
 
 function createConfigsRepository({ ConfigModel }) {
-  if (!ConfigModel) {
-    throw new Error('ConfigModel is required to create configs repository');
-  }
+	if (!ConfigModel) {
+		throw new Error('ConfigModel is required to create configs repository');
+	}
 
-  async function findById(id) {
-    return await ConfigModel.findByPk(id);
-  }
+	async function findById(id) {
+		return await ConfigModel.findByPk(id);
+	}
 
-  async function create(configData) {
-    return await ConfigModel.create(configData);
-  }
+	async function findAll() {
+		return await ConfigModel.findAll();
+	}
 
-  async function update(id, configData) {
-    // Returns [affectedCount]
-    const [affectedCount] = await ConfigModel.update(configData, {
-      where: { id },
-    });
-    return affectedCount;
-  }
+	async function create(configData) {
+		return await ConfigModel.create(configData);
+	}
 
-  async function deleteById(id) {
-    return await ConfigModel.destroy({
-      where: { id },
-    });
-  }
+	async function update(id, configData) {
+		// Returns [affectedCount]
+		const [affectedCount] = await ConfigModel.update(configData, {
+			where: { id },
+		});
+		return affectedCount;
+	}
 
-  return {
-    findById,
-    create,
-    update,
-    deleteById,
-  };
+	async function deleteById(id) {
+		return await ConfigModel.destroy({
+			where: { id },
+		});
+	}
+
+	return {
+		findById,
+		findAll,
+		create,
+		update,
+		deleteById,
+	};
 }
 
 export default createConfigsRepository;

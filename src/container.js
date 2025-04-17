@@ -7,6 +7,9 @@ import ConfigsService from './services/configsService.js';
 import EthereumService from './services/ethereumService.js';
 import createConfigsRepository from './repositories/configsRepository.js';
 import dotenv from 'dotenv';
+import createServer from './server.js';
+import ConfigsController from './controllers/configsController.js';
+
 dotenv.config();
 
 const ethereumWssUrl = process.env.ETH_SEPOLIA_WSS;
@@ -23,15 +26,23 @@ async function configureContainer() {
         const container = createContainer();
 
         container.register({
+            // DB
             sequelize: asValue(sequelize), // for graceful shutdown
             models: asValue(models), // makes it extendable. we have access to all models in the container
 
+            // Repositories
             // factory function that resolves the model. it depends on the model
             configsRepository: asFunction(({ models }) => createConfigsRepository({ ConfigModel: models.ConfigModel })).singleton(),
 
+            // Services
             configsService: asClass(ConfigsService).singleton(),
             ethereumService: asClass(EthereumService).singleton(),
 
+            // API Components
+            configsController: asClass(ConfigsController).singleton(),
+            server: asFunction(createServer).singleton(),
+
+            // Configuration values
             ethereumWssUrl: asValue(ethereumWssUrl),
         });
 

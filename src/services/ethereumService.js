@@ -96,23 +96,23 @@ class EthereumService {
     }
 
     #matchesActiveConfig(tx) {
-        // If no active config or tx is invalid, it's not a match
+        // TODO
+        // if no active config or tx is invalid, it's not a match
         if (!this.activeConfig || !this.activeConfig.rules || !tx) {
             return false;
         }
 
         const rules = this.activeConfig.rules; // { fromAddress: '..' , toAddress: '..' , valueGreaterThan: '...' }
-        let match = true; // Assume match until a rule fails
+        let match = true; // assume match until a rule fails
 
-        // --- Filtering Logic --- 
-        // Case-insensitive address comparison
+        // case-insensitive address comparison
         if (rules.fromAddress && (!tx.from || tx.from.toLowerCase() !== rules.fromAddress.toLowerCase())) {
             match = false;
         }
         if (match && rules.toAddress && (!tx.to || tx.to.toLowerCase() !== rules.toAddress.toLowerCase())) {
             match = false;
         }
-        // Value comparison (using pre-parsed value if available)
+        // value comparison (using pre-parsed value if available)
         if (match && rules.valueGreaterThan) {
             try {
                 // const threshold = rules._valueThreshold || parseUnits(rules.valueGreaterThan, 'ether');
@@ -126,7 +126,6 @@ class EthereumService {
                 // match = false; 
             }
         }
-        // --- Add more filtering rules as needed --- 
 
         return match;
     }

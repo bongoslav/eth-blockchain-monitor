@@ -4,22 +4,37 @@
 module.exports = {
 	async up(queryInterface, Sequelize) {
 		await queryInterface.createTable('transactions', {
-			id: {
-				type: Sequelize.INTEGER,
-				primaryKey: true,
-				autoIncrement: true,
-			},
 			hash: {
 				type: Sequelize.STRING,
+				primaryKey: true,
 				allowNull: false,
+				unique: true,
 			},
-			blockchain: {
+			fromAddress: {
 				type: Sequelize.STRING,
 				allowNull: false,
 			},
-			network: {
+			toAddress: {
+				type: Sequelize.STRING,
+				allowNull: true,
+			},
+			value: {
 				type: Sequelize.STRING,
 				allowNull: false,
+			},
+			blockNumber: {
+				type: Sequelize.INTEGER,
+				allowNull: false,
+			},
+			configId: {
+				type: Sequelize.INTEGER,
+				allowNull: false,
+				references: {
+					model: 'configs',
+					key: 'id',
+				},
+				onUpdate: 'CASCADE',
+				onDelete: 'CASCADE',
 			},
 			createdAt: {
 				type: Sequelize.DATE,

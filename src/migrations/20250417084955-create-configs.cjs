@@ -14,6 +14,10 @@ module.exports = {
 				allowNull: true,
 				unique: false,
 			},
+			hash: {
+				type: Sequelize.STRING,
+				allowNull: true,
+			},
 			fromAddress: {
 				type: Sequelize.STRING,
 				allowNull: true,

@@ -1,27 +1,38 @@
 'use strict';
 
-import createConfigsRepository from '../repositories/configsRepository.js';
-
-// TODO
 class ConfigsService {
-  constructor({ db }) {
-    this.configsRepository = createConfigsRepository({ db });
+  constructor({ configsRepository }) {
+    if (!configsRepository) {
+      throw new Error('configsRepository dependency is required for ConfigsService');
+    }
+    this.configsRepository = configsRepository;
   }
 
   async getConfiguration(id) {
     return await this.configsRepository.findById(id);
   }
 
-  async createConfiguration(configuration) {
-    return await this.configsRepository.create(configuration);
+  async createConfiguration(configurationData) {
+    // ? validation
+    return await this.configsRepository.create(configurationData);
   }
 
-  async updateConfiguration(id, configuration) {
-    return await this.configsRepository.update(id, configuration);
+  async updateConfiguration(id, configurationData) {
+    // ? validation
+    // ? update and return?
+    const affectedCount = await this.configsRepository.update(id, configurationData);
+    if (affectedCount === 0) {
+      return null;
+    }
+    return await this.configsRepository.findById(id);
   }
 
   async deleteConfiguration(id) {
-    return await this.configsRepository.delete(id);
+    const deletedCount = await this.configsRepository.deleteById(id);
+    if (deletedCount === 0) {
+      return null;
+    }
+    return deletedCount;
   }
 }
 

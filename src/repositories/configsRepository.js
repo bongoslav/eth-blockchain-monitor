@@ -1,22 +1,37 @@
 'use strict';
 
-// TODO
-function createConfigsRepository({ db }) {
+function createConfigsRepository({ ConfigModel }) {
+  if (!ConfigModel) {
+    throw new Error('ConfigModel is required to create configs repository');
+  }
+
+  async function findById(id) {
+    return await ConfigModel.findByPk(id);
+  }
+
+  async function create(configData) {
+    return await ConfigModel.create(configData);
+  }
+
+  async function update(id, configData) {
+    // Returns [affectedCount]
+    const [affectedCount] = await ConfigModel.update(configData, {
+      where: { id },
+    });
+    return affectedCount;
+  }
+
+  async function deleteById(id) {
+    return await ConfigModel.destroy({
+      where: { id },
+    });
+  }
+
   return {
-    findById: (id) => db.find(config => config.id === id),
-    create: (config) => db.push(config),
-    update: async (id, config) => {
-      const index = await db.findIndex(config => config.id === id);
-      if (index !== -1) {
-        db[index] = config;
-      }
-    },
-    delete: async (id) => {
-      const index = await db.findIndex(config => config.id === id);
-      if (index !== -1) {
-        db.splice(index, 1);
-      }
-    }
+    findById,
+    create,
+    update,
+    deleteById,
   };
 }
 

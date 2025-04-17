@@ -1,87 +1,143 @@
 'use strict';
 
-import { WebSocketProvider } from 'ethers';
-
-// TODO: improve error handling and logging, lint at the end.
+import { WebSocketProvider, parseUnits, formatUnits } from 'ethers';
 
 class EthereumService {
-    constructor({ ethereumWssUrl, transactionFilterConfig }) {
+    constructor({ ethereumWssUrl, configsService }) {
+        if (!ethereumWssUrl || !configsService) {
+            throw new Error('EthereumService requires ethereumWssUrl and configsService dependencies.');
+        }
         this.providerUrl = ethereumWssUrl;
-        this.filterConfig = transactionFilterConfig || {};
+        this.configsService = configsService;
+        this.activeConfig = null;
         this.provider = null;
     }
 
     async initialize() {
-        if (!this.providerUrl) {
-            throw new Error('Ethereum provider URL not configured. Inject ethereumWssUrl into the container.');
-        }
-
+        console.log('Initializing EthereumService...');
         this.provider = new WebSocketProvider(this.providerUrl);
 
-        this.provider.on('error', (error) => {
-            console.error('WebSocket Provider Error:', error);
-            this.#reconnect();
+        this.provider.on('error', async (error) => {
+            console.error('WebSocket Provider Error:', error.message);
+            await this.provider.destroy();
         });
 
-        return this.provider;
+        // Note: No configuration loaded here. Must be set via setActiveConfigById.
+        console.log('EthereumService initialized. Waiting for active configuration to be set.');
+    }
+
+    async setActiveConfigById(configId) {
+        if (configId === null) {
+            this.activeConfig = null;
+            console.log('Transaction filtering disabled. No active configuration.');
+            return true;
+        }
+
+        console.log(`Attempting to set active configuration to ID: ${configId}...`);
+        try {
+            const config = await this.configsService.getConfiguration(configId);
+            if (config) {
+                this.activeConfig = config;
+                console.log(`Successfully set active configuration to '${config.name}' (ID: ${config.id}). Rules:`, config.rules);
+                return true;
+            } else {
+                console.warn(`Configuration with ID ${configId} not found. Active configuration unchanged.`);
+                return false;
+            }
+        } catch (error) {
+            console.error(`Failed to set active configuration ID ${configId}:`, error);
+            return false;
+        }
     }
 
     async startMonitoring() {
         if (!this.provider) {
+            console.warn('Provider not initialized. Call initialize() first.');
             await this.initialize();
         }
 
-        console.log('Starting Ethereum block monitoring with filters:', this.filterConfig);
-        this.provider.on('block', async (blockNumber) => {
-            console.log(`\nNew block received: ${blockNumber}`);
-            try {
-                const block = await this.provider.getBlock(blockNumber, true);
-                if (!block || !block.transactions) {
-                    console.warn(`Block ${blockNumber} not found or has no transactions.`);
-                    return;
-                }
+        console.log('Starting Ethereum block monitoring...');
+        this.provider.on('block', this.#handleBlock);
 
-                const transactions = block.transactions;
-                const fullTxs = await Promise.all(transactions.map(txHash => this.provider.getTransaction(txHash)));
+        console.log('Provider is ready and listening for blocks.');
+    }
 
-                const filteredTxs = fullTxs.filter(tx => this.#shouldProcessTransaction(tx));
-
-                console.log(`Found ${filteredTxs.length} matching transactions out of ${transactions.length} total in block ${blockNumber}`);
-
-                const transactionPromises = filteredTxs.map(tx => this.#processTransaction(tx));
-                await Promise.all(transactionPromises);
-
-                console.log(`Finished processing filtered transactions for block ${blockNumber}.`);
-            } catch (err) {
-                console.error(`Error processing block ${blockNumber}:`, err);
+    #handleBlock = async (blockNumber) => {
+        console.log(`\nNew block received: ${blockNumber}`);
+        try {
+            const block = await this.provider.getBlock(blockNumber, true); // Fetch block with transactions
+            if (!block || !block.prefetchedTransactions) {
+                console.warn(`Block ${blockNumber} not found or has no prefetched transactions.`);
+                return;
             }
-        });
-    }
 
-    async #reconnect() {
-        // TODO: counter for attempts
-        console.log('Attempting to reconnect to Ethereum node...');
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        try {
-            await this.initialize();
-        } catch (error) {
-            console.error('Failed to reconnect:', error);
+            if (!this.activeConfig) {
+                return; // Don't process if no config is active
+            }
+
+            const transactions = block.prefetchedTransactions;
+            console.log(`Block ${blockNumber} contains ${transactions.length} transactions. Filtering with config ID: ${this.activeConfig.id}`);
+
+            const matchedTransactions = [];
+            for (const tx of transactions) {
+                if (this.#matchesActiveConfig(tx)) {
+                    matchedTransactions.push(tx);
+                }
+            }
+
+            if (matchedTransactions.length > 0) {
+                console.log(`Found ${matchedTransactions.length} matching transactions in block ${blockNumber}.`);
+                await Promise.all(matchedTransactions.map(tx => this.#processTransaction(tx, this.activeConfig)));
+            }
+
+        } catch (err) {
+            console.error(`Error processing block ${blockNumber}:`, err.message);
         }
     }
 
-    #shouldProcessTransaction(tx) {
-        // no filters defined, process all transactions
-        if (!this.filterConfig) {
-            return true;
+    #matchesActiveConfig(tx) {
+        // If no active config or tx is invalid, it's not a match
+        if (!this.activeConfig || !this.activeConfig.rules || !tx) {
+            return false;
         }
-        // TODO: Implement transaction filtering logic depending on config
+
+        const rules = this.activeConfig.rules; // { fromAddress: '..' , toAddress: '..' , valueGreaterThan: '...' }
+        let match = true; // Assume match until a rule fails
+
+        // --- Filtering Logic --- 
+        // Case-insensitive address comparison
+        if (rules.fromAddress && (!tx.from || tx.from.toLowerCase() !== rules.fromAddress.toLowerCase())) {
+            match = false;
+        }
+        if (match && rules.toAddress && (!tx.to || tx.to.toLowerCase() !== rules.toAddress.toLowerCase())) {
+            match = false;
+        }
+        // Value comparison (using pre-parsed value if available)
+        if (match && rules.valueGreaterThan) {
+            try {
+                // const threshold = rules._valueThreshold || parseUnits(rules.valueGreaterThan, 'ether');
+                const threshold = parseUnits(rules.valueGreaterThan, 'ether'); // Parse every time or pre-parse in setActiveConfigById
+                if (tx.value < threshold) {
+                    match = false;
+                }
+            } catch (e) {
+                console.warn(`Config ID ${this.activeConfig.id}: Invalid value format in rule valueGreaterThan: '${rules.valueGreaterThan}'. Skipping value rule for this tx.`);
+                // Decide if an invalid rule should cause the whole transaction not to match
+                // match = false; 
+            }
+        }
+        // --- Add more filtering rules as needed --- 
+
+        return match;
     }
 
-    async #processTransaction(tx) {
+    async #processTransaction(tx, activeConfig) {
         try {
-            console.log(`Processing transaction: ${tx.hash}`);
+            console.log(`Processing transaction ${tx.hash} matched by Config '${activeConfig.name}' (ID: ${activeConfig.id})`);
+            console.log(`  From: ${tx.from}, To: ${tx.to}, Value: ${formatUnits(tx.value, 'ether')} ETH`);
 
-            // TODO: store in database
+            // TODO: Implement database storage logic here.
+            // Store tx details and the ID of the activeConfig (activeConfig.id).
 
         } catch (error) {
             console.error(`Error processing transaction ${tx.hash}:`, error);

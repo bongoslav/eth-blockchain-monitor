@@ -12,13 +12,36 @@ class Config extends Model {
 			},
 			name: {
 				type: DataTypes.STRING,
-				allowNull: false,
-				unique: true,
+				allowNull: true,
+				unique: false,
 			},
-			rules: {
-				type: DataTypes.JSON,
-				allowNull: false,
-				comment: 'JSON object containing the filtering rules for transactions.'
+			hash: {
+				type: DataTypes.STRING,
+				allowNull: true,
+			},
+			fromAddress: {
+				type: DataTypes.STRING,
+				allowNull: true,
+			},
+			toAddress: {
+				type: DataTypes.STRING,
+				allowNull: true,
+			},
+			value: {
+				type: DataTypes.STRING,
+				allowNull: true,
+			},
+			blockNumber: {
+				type: DataTypes.INTEGER,
+				allowNull: true,
+			},
+			index: {
+				type: DataTypes.INTEGER,
+				allowNull: true,
+			},
+			type: {
+				type: DataTypes.INTEGER,
+				allowNull: true,
 			},
 			active: {
 				type: DataTypes.BOOLEAN,

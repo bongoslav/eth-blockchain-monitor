@@ -26,6 +26,14 @@ module.exports = {
 				type: Sequelize.INTEGER,
 				allowNull: false,
 			},
+			index: {
+				type: Sequelize.INTEGER,
+				allowNull: false,
+			},
+			type: {
+				type: Sequelize.INTEGER,
+				allowNull: false,
+			},
 			configId: {
 				type: Sequelize.INTEGER,
 				allowNull: false,

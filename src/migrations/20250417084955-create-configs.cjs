@@ -11,11 +11,32 @@ module.exports = {
 			},
 			name: {
 				type: Sequelize.STRING,
-				allowNull: false,
+				allowNull: true,
+				unique: false,
 			},
-			rules: {
-				type: Sequelize.JSON,
-				allowNull: false,
+			fromAddress: {
+				type: Sequelize.STRING,
+				allowNull: true,
+			},
+			toAddress: {
+				type: Sequelize.STRING,
+				allowNull: true,
+			},
+			value: {
+				type: Sequelize.STRING,
+				allowNull: true,
+			},
+			blockNumber: {
+				type: Sequelize.INTEGER,
+				allowNull: true,
+			},
+			index: {
+				type: Sequelize.INTEGER,
+				allowNull: true,
+			},
+			type: {
+				type: Sequelize.INTEGER,
+				allowNull: true,
 			},
 			active: {
 				type: Sequelize.BOOLEAN,

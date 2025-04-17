@@ -5,7 +5,6 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon src/index.js",
     "db:migrate": "npx sequelize-cli db:migrate",
     "db:migrate:undo": "npx sequelize-cli db:migrate:undo",
@@ -18,15 +17,12 @@
   "license": "ISC",
   "dependencies": {
     "awilix": "^12.0.5",
-    "awilix-express": "^9.0.2",
-    "axios": "^1.8.4",
     "dotenv": "^16.5.0",
     "ethers": "^6.13.5",
     "express": "^5.1.0",
     "joi": "^17.13.3",
     "sequelize": "^6.37.7",
-    "sqlite3": "^5.1.7",
-    "web3": "^4.16.0"
+    "sqlite3": "^5.1.7"
   },
   "devDependencies": {
     "nodemon": "^3.1.9",

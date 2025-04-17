@@ -16,19 +16,26 @@ class ConfigsService {
 		return await this.configsRepository.findAll();
 	}
 
+	async getActiveConfig() {
+		return await this.configsRepository.findActive();
+	}
+
+	async setActiveConfig(id) {
+		return await this.configsRepository.setActive(id);
+	}
+
 	async createConfiguration(configurationData) {
-		// ? validation
 		return await this.configsRepository.create(configurationData);
 	}
 
 	async updateConfiguration(id, configurationData) {
-		// ? validation
-		// ? update and return?
-		const affectedCount = await this.configsRepository.update(id, configurationData);
-		if (affectedCount === 0) {
-			return null;
+		if (configurationData.active === true) {
+			return await this.configsRepository.updateAndEnsureSingleActive(id, configurationData);
+		} else if (configurationData.active === false) {
+			return await this.configsRepository.updateIfActive(id, configurationData);
 		}
-		return await this.configsRepository.findById(id);
+		
+		return await this.configsRepository.update(id, configurationData);
 	}
 
 	async deleteConfiguration(id) {

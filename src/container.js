@@ -1,6 +1,6 @@
 'use strict';
 
-import { createContainer, asClass, asFunction, asValue, Lifetime } from 'awilix';
+import { createContainer, asClass, asFunction, asValue } from 'awilix';
 import { initializeDatabase, sequelize } from './config/db.js';
 import { initModels } from './models/index.js';
 import ConfigsService from './services/configsService.js';
@@ -12,27 +12,25 @@ import ConfigsController from './controllers/configsController.js';
 
 dotenv.config();
 
-const ethereumWssUrl = process.env.ETH_SEPOLIA_WSS;
-
-// TODO: load from db. `On restart the previous configuration should be used.`
-
 async function configureContainer() {
     try {
         await initializeDatabase();
         const models = initModels(sequelize);
-        await Promise.all(Object.values(models).map(model => model.sync({ alter: true })));
-        console.log('Models synchronized successfully.');
+
+        await models.Config.sync({ alter: false });
+        await models.Transaction.sync({ alter: true });
+        console.log('All models synced successfully.');
 
         const container = createContainer();
 
         container.register({
             // DB
-            sequelize: asValue(sequelize), // for graceful shutdown
-            models: asValue(models), // makes it extendable. we have access to all models in the container
+            sequelize: asValue(sequelize),
+            Config: asValue(models.Config),
+            Transaction: asValue(models.Transaction),
 
             // Repositories
-            // factory function that resolves the model. it depends on the model
-            configsRepository: asFunction(({ models }) => createConfigsRepository({ ConfigModel: models.ConfigModel })).singleton(),
+            configsRepository: asFunction(({ Config }) => createConfigsRepository({ ConfigModel: Config })).singleton(),
 
             // Services
             configsService: asClass(ConfigsService).singleton(),
@@ -42,8 +40,11 @@ async function configureContainer() {
             configsController: asClass(ConfigsController).singleton(),
             server: asFunction(createServer).singleton(),
 
-            // Configuration values
-            ethereumWssUrl: asValue(ethereumWssUrl),
+            // Ethereum Service configuration
+            ethereumWssUrl: asValue(process.env.ETH_WSS_URL),
+            batchSize: asValue(parseInt(process.env.BATCH_SIZE) || 100),
+            flushIntervalMs: asValue(parseInt(process.env.FLUSH_INTERVAL_MS) || 5000),
+            maxRetries: asValue(parseInt(process.env.MAX_RETRIES) || 3),
         });
 
         console.log('Container configured successfully.');

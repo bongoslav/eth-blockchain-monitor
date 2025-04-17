@@ -25,7 +25,7 @@ const PORT = process.env.PORT || 3000;
         // await ethereumService.startMonitoring();
 
         runningServer = server.listen(PORT, () => {
-             console.log(`API Server listening on port ${PORT}`);
+            console.log(`API Server listening on port ${PORT}`);
         });
 
         console.log('Ethereum Monitor application backend started successfully.');
@@ -40,9 +40,12 @@ const PORT = process.env.PORT || 3000;
     process.on('SIGINT', async () => {
         console.log('\nShutting down gracefully...');
         try {
+            await ethereumService.shutdown();
+            console.log('Ethereum Service closed.');
+
             if (runningServer) {
-                 await new Promise(resolve => runningServer.close(resolve));
-                 console.log('API Server closed.');
+                await runningServer.close();
+                console.log('API Server closed.');
             }
             if (sequelize) {
                 await sequelize.close();

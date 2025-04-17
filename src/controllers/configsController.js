@@ -1,5 +1,7 @@
 'use strict';
 
+import configSchema from '../validations/configurations.js';
+
 class ConfigsController {
     constructor({ configsService, ethereumService }) {
         if (!configsService || !ethereumService) {
@@ -17,6 +19,7 @@ class ConfigsController {
             if (isNaN(id)) {
                 return res.status(400).json({ error: 'Invalid configuration ID' });
             }
+
             const config = await this.configsService.getConfiguration(id);
             if (!config) {
                 return res.status(404).json({ error: 'Configuration not found' });
@@ -42,7 +45,12 @@ class ConfigsController {
     async createConfiguration(req, res, next) {
         console.log('createConfiguration called');
         try {
-            // TODO: Add validation for req.body
+            const validateResult = configSchema.createConfiguration.validate(req.body);
+            if (validateResult.error) {
+                console.log(validateResult.error.message);
+                return res.status(400).json({ error: validateResult.error.message });
+            }
+
             const newConfig = await this.configsService.createConfiguration(req.body);
             res.status(201).json(newConfig);
         } catch (error) {
@@ -62,7 +70,11 @@ class ConfigsController {
                 return res.status(400).json({ error: 'Invalid configuration ID' });
             }
 
-            // TODO: validation !! (dont pass string to bool)
+            const validateResult = configSchema.updateConfiguration.validate(req.body);
+            if (validateResult.error) {
+                console.log(validateResult.error.message);
+                return res.status(400).json({ error: validateResult.error.message });
+            }
 
             const currentConfig = await this.configsService.getConfiguration(id);
             if (!currentConfig) {

@@ -20,8 +20,19 @@ class ConfigsService {
 		return await this.configsRepository.findActive();
 	}
 
-	async setActiveConfig(id) {
-		return await this.configsRepository.setActive(id);
+	validateActiveStatusChange(currentConfig, newData) {
+		if (newData.active === undefined || newData.active === currentConfig.active) {
+			return null;
+		}
+
+		if (currentConfig.active === true && newData.active === false) {
+			return {
+				status: 409,
+				message: 'Cannot set active config to inactive'
+			};
+		}
+
+		return null;
 	}
 
 	async createConfiguration(configurationData) {
@@ -29,21 +40,12 @@ class ConfigsService {
 	}
 
 	async updateConfiguration(id, configurationData) {
-		if (configurationData.active === true) {
-			return await this.configsRepository.updateAndEnsureSingleActive(id, configurationData);
-		} else if (configurationData.active === false) {
-			return await this.configsRepository.updateIfActive(id, configurationData);
-		}
-		
 		return await this.configsRepository.update(id, configurationData);
 	}
 
 	async deleteConfiguration(id) {
 		const deletedCount = await this.configsRepository.deleteById(id);
-		if (deletedCount === 0) {
-			return null;
-		}
-		return deletedCount;
+		return deletedCount > 0;
 	}
 }
 

@@ -62,22 +62,22 @@ class ConfigsController {
                 return res.status(400).json({ error: 'Invalid configuration ID' });
             }
 
-            // TODO: Add validation for req.body
+            // TODO: validation !! (dont pass string to bool)
 
-            const updatedConfig = await this.configsService.updateConfiguration(id, req.body);
-            if (!updatedConfig) {
+            const currentConfig = await this.configsService.getConfiguration(id);
+            if (!currentConfig) {
                 return res.status(404).json({ error: 'Configuration not found' });
             }
 
-            // check if the updated config IS NOW active and notify EthereumService
-            if (updatedConfig.active === true) {
-                console.log(`Configuration (ID: ${updatedConfig.id}) is now active. Notifying EthereumService...`);
-                if (this.ethereumService) {
-                    // signal the service to update its config on the next block
-                    this.ethereumService.notifyActiveConfigChanged();
-                } else {
-                    console.warn('EthereumService not available in ConfigsController to notify active state change.');
-                }
+            const activeValidationError = this.configsService.validateActiveStatusChange(currentConfig, req.body);
+            if (activeValidationError) {
+                return res.status(activeValidationError.status).json({ error: activeValidationError.message });
+            }
+
+            const updatedConfig = await this.configsService.updateConfiguration(id, req.body);
+            
+            if (currentConfig.active === false && req.body.active === true) {
+                this.ethereumService?.notifyActiveConfigChanged();
             }
 
             res.json(updatedConfig);
@@ -97,19 +97,19 @@ class ConfigsController {
             if (isNaN(id)) {
                 return res.status(400).json({ error: 'Invalid configuration ID' });
             }
-            const deletedCount = await this.configsService.deleteConfiguration(id);
-            if (deletedCount === null) {
+            
+            const config = await this.configsService.getConfiguration(id);
+            if (!config) {
                 return res.status(404).json({ error: 'Configuration not found' });
             }
 
-            // Check if the deleted config was the active one and notify EthereumService
-            if (this.ethereumService?.activeConfig?.id === id) {
-                console.log(`Active configuration (ID: ${id}) was deleted. Notifying EthereumService...`);
-                if (this.ethereumService) {
-                    this.ethereumService.notifyActiveConfigChanged();
-                } else {
-                    console.warn('EthereumService not available in ConfigsController to notify active state change after deletion.');
-                }
+            if (config.active === true) {
+                return res.status(409).json({ error: 'Cannot delete active configuration' });
+            }
+            
+            const deleted = await this.configsService.deleteConfiguration(id);
+            if (!deleted) {
+                return res.status(500).json({ error: 'Failed to delete configuration' });
             }
 
             res.status(204).send();

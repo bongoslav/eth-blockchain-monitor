@@ -27,15 +27,27 @@ class Config extends Model {
 				type: DataTypes.STRING,
 				allowNull: true,
 			},
-			value: {
+			minValue: {
 				type: DataTypes.STRING,
 				allowNull: true,
 			},
-			blockNumber: {
+			maxValue: {
+				type: DataTypes.STRING,
+				allowNull: true,
+			},
+			minBlockNumber: {
 				type: DataTypes.INTEGER,
 				allowNull: true,
 			},
-			index: {
+			maxBlockNumber: {
+				type: DataTypes.INTEGER,
+				allowNull: true,
+			},
+			minIndex: {
+				type: DataTypes.INTEGER,
+				allowNull: true,
+			},
+			maxIndex: {
 				type: DataTypes.INTEGER,
 				allowNull: true,
 			},

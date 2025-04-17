@@ -26,15 +26,27 @@ module.exports = {
 				type: Sequelize.STRING,
 				allowNull: true,
 			},
-			value: {
+			minValue: {
 				type: Sequelize.STRING,
 				allowNull: true,
 			},
-			blockNumber: {
+			maxValue: {
+				type: Sequelize.STRING,
+				allowNull: true,
+			},
+			minBlockNumber: {
 				type: Sequelize.INTEGER,
 				allowNull: true,
 			},
-			index: {
+			maxBlockNumber: {
+				type: Sequelize.INTEGER,
+				allowNull: true,
+			},
+			minIndex: {
+				type: Sequelize.INTEGER,
+				allowNull: true,
+			},
+			maxIndex: {
 				type: Sequelize.INTEGER,
 				allowNull: true,
 			},

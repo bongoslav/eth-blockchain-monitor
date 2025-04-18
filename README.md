@@ -67,7 +67,7 @@ npm run db:migrate:undo:all
 
 ## Endpoints for the Configurations
 
-Local url: `http://localhost:3000`
+Local url: `http://localhost:3000/api/v1`
 
 | Method | Endpoint     | Description           | Request Body Example                                                                                 |
 | ------ | ------------ | --------------------- | ---------------------------------------------------------------------------------------------------- |

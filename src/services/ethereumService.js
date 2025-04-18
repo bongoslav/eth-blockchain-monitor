@@ -1,6 +1,7 @@
 'use strict';
 
 import { WebSocketProvider } from 'ethers';
+import logger from '../config/winston.js';
 
 class EthereumService {
     constructor({
@@ -9,7 +10,8 @@ class EthereumService {
         Transaction,
         batchSize,
         flushIntervalMs,
-        maxRetries
+        maxRetries,
+        maxWSSRetries
     }) {
         if (!ethereumWssUrl || !configsService || !Transaction) {
             throw new Error('EthereumService requires ethereumWssUrl, configsService, and Transaction dependencies.');
@@ -27,6 +29,14 @@ class EthereumService {
         this.flushIntervalMs = flushIntervalMs;
         this.maxRetries = maxRetries;
         this.flushTimer = null;
+
+        // WSS connection configuration
+        this.maxWSSRetries = maxWSSRetries;
+        this.isShuttingDown = false;
+        
+        // Block processing queue
+        this.blockQueue = [];
+        this.isProcessingBlock = false;
     }
 
     /**
@@ -34,24 +44,75 @@ class EthereumService {
      * @return {Promise<void>}
      */
     async initialize() {
-        console.log('Initializing EthereumService...');
+        if (this.provider) {
+            this.provider.removeAllListeners();
+            try {
+                await this.provider.destroy();
+            } catch (e) {
+                logger.warn(`Error destroying old provider: ${e.message}`);
+            }
+        }
+
+        let retryCount = 0;
+        logger.debug('Initializing EthereumService...');
         this.provider = new WebSocketProvider(this.providerUrl);
 
         this.provider.on('error', async (error) => {
-            console.error('WebSocket Provider Error:', error.message);
-            await this.provider.destroy();
-            this.provider = null;
+            logger.error(`WebSocket Provider Error: ${error.message}\n${error.stack || ''}`);
+
+            if (this.isShuttingDown) return; // don't reconnect if shutting down
+
+            logger.debug('Attempting to reconnect...');
+
+            retryCount++;
+
+            logger.warn(`Retrying connection (attempt ${retryCount}/${this.maxWSSRetries})`);
+
+            await new Promise(resolve => setTimeout(resolve, 100 * Math.pow(2, retryCount)));
+
+            if (retryCount >= this.maxWSSRetries) {
+                await this.shutdown();
+                logger.error('Failed to reconnect after maximum attempts. Exiting...');
+                process.exit(1);
+            }
+
+            await this.initialize();
         });
 
         this.activeConfig = await this.configsService.getActiveConfig();
         if (!this.activeConfig) {
-            console.log('EthereumService initialized. No active configuration set.');
+            logger.debug('EthereumService initialized. No active configuration set.');
         } else {
-            console.log(`EthereumService initialized. Active configuration set to '${this.activeConfig.name}' (ID: ${this.activeConfig.id}).`);
+            logger.debug(`EthereumService initialized. Active configuration set to '${this.activeConfig.name}' (ID: ${this.activeConfig.id}).`);
         }
         this.activeConfigNeedsUpdate = false; // Initial config loaded
 
         this.#startPeriodicFlush();
+    }
+
+    /**
+     * Starts monitoring for new blocks from the Ethereum provider
+     * @return {Promise<void>}
+     */
+    async startMonitoring() {
+        if (!this.provider) {
+            logger.warn('Provider not initialized. Initializing...');
+            await this.initialize();
+        }
+
+        logger.debug('Starting Ethereum block monitoring...');
+        this.provider.on('block', this.#handleNewBlock);
+
+        logger.debug('Provider is ready and listening for blocks.');
+    }
+
+    /**
+     * "Notifies" the service that the active configuration may have changed.
+     * @return {void}
+     */
+    notifyActiveConfigChanged() {
+        logger.debug('Active config UPDATED. Next block will use new config.');
+        this.activeConfigNeedsUpdate = true;
     }
 
     /**
@@ -66,45 +127,58 @@ class EthereumService {
 
         this.flushTimer = setInterval(async () => {
             if (this.transactionBuffer.length > 0) {
-                console.log(`Periodic flush: Processing ${this.transactionBuffer.length} buffered transactions...`);
+                logger.debug(`Periodic flush: Processing ${this.transactionBuffer.length} buffered transactions...`);
                 await this.#flushTransactionBuffer();
             }
         }, this.flushIntervalMs);
     }
 
     /**
-     * Starts monitoring for new blocks from the Ethereum provider
-     * @return {Promise<void>}
-     */
-    async startMonitoring() {
-        if (!this.provider) {
-            console.warn('Provider not initialized. Initializing...');
-            await this.initialize();
-        }
-
-        console.log('Starting Ethereum block monitoring...');
-        this.provider.on('block', this.#handleBlock);
-
-        console.log('Provider is ready and listening for blocks.');
-    }
-
-    /**
-     * "Notifies" the service that the active configuration may have changed.
-     * @return {void}
-     */
-    notifyActiveConfigChanged() {
-        console.log('Received notification: Active config may have changed. Flag set for next block.');
-        this.activeConfigNeedsUpdate = true;
-    }
-
-    /**
-     * Handles block processing from the Ethereum provider. Triggered on block event.
+     * Handles new blocks from the Ethereum provider. Adds to queue and processes sequentially.
      * @param {number} blockNumber - The number of the new block
+     * @return {void}
+     * @private
+     */
+    #handleNewBlock = (blockNumber) => {
+        this.blockQueue.push(blockNumber);
+        logger.debug(`New block received: ${blockNumber}. Added to queue. Queue size: ${this.blockQueue.length}`);
+        this.#processNextBlockInQueue();
+    }
+
+    /**
+     * Processes the next block in the queue if not already processing a block
      * @return {Promise<void>}
      * @private
      */
-    #handleBlock = async (blockNumber) => {
-        console.log(`\nNew block received: ${blockNumber}`);
+    #processNextBlockInQueue = async () => {
+        if (this.isProcessingBlock || this.blockQueue.length === 0) {
+            return;
+        }
+
+        this.isProcessingBlock = true;
+        const blockNumber = this.blockQueue.shift();
+        
+        try {
+            logger.debug(`Processing block ${blockNumber} from queue. Remaining in queue: ${this.blockQueue.length}`);
+            await this.#processBlock(blockNumber);
+        } catch (error) {
+            logger.error(`Error processing block ${blockNumber} from queue: ${error.message}\n${error.stack || ''}`);
+        } finally {
+            // don't stop processing blocks
+            this.isProcessingBlock = false;
+            if (this.blockQueue.length > 0) {
+                await this.#processNextBlockInQueue();
+            }
+        }
+    }
+
+    /**
+     * Processes a single block and its transactions
+     * @param {number} blockNumber - The number of the block to process
+     * @return {Promise<void>}
+     * @private
+     */
+    async #processBlock(blockNumber) {
         try {
             if (this.activeConfigNeedsUpdate) {
                 const newActiveConfig = await this.configsService.getActiveConfig();
@@ -112,22 +186,22 @@ class EthereumService {
                 this.activeConfig = newActiveConfig;
                 this.activeConfigNeedsUpdate = false;
 
-                console.log(`Active config set to ${newActiveConfig.id}.`);
+                logger.debug(`Active config set to ${newActiveConfig.id}.`);
             }
 
             if (!this.activeConfig) {
-                console.log('No active configuration set. Skipping block processing.');
+                logger.debug('No active configuration set. Skipping block processing.');
                 return;
             }
 
             const block = await this.provider.getBlock(blockNumber, true);
             if (!block || !block.transactions) {
-                console.warn(`Block ${blockNumber} not found or has no transactions.`);
+                logger.warn(`Block ${blockNumber} not found or has no transactions.`);
                 return;
             }
 
             const transactionHashes = block.transactions;
-            console.log(`Block ${blockNumber} contains ${transactionHashes.length} transaction hashes. Filtering with active config ID: ${this.activeConfig.id}`);
+            logger.debug(`Block ${blockNumber} contains ${transactionHashes.length} transaction hashes. Filtering with active config ID: ${this.activeConfig.id}`);
 
             let matchCount = 0;
             for (const txHash of transactionHashes) {
@@ -136,7 +210,7 @@ class EthereumService {
                 if (fullTx && this.#matchesActiveConfig(fullTx, this.activeConfig)) {
                     await this.#bufferTransaction(fullTx, this.activeConfig);
                     matchCount++;
-                    
+
                     if (this.transactionBuffer.length >= this.batchSize) {
                         await this.#flushTransactionBuffer();
                     }
@@ -144,16 +218,16 @@ class EthereumService {
             }
 
             if (matchCount > 0) {
-                console.log(`Found and buffered ${matchCount} matching transactions in block ${blockNumber}.`);
+                logger.debug(`Found and buffered ${matchCount} matching transactions in block ${blockNumber}.`);
             }
-            
+
             // ensuring any remaining transactions from this block are flushed
             if (this.transactionBuffer.length > 0) {
                 await this.#flushTransactionBuffer();
             }
 
         } catch (err) {
-            console.error(`Error processing block ${blockNumber}:`, err.message, err.stack);
+            logger.error(`Error processing block ${blockNumber}: ${err.message}\n${err.stack || ''}`);
         }
     }
 
@@ -166,7 +240,7 @@ class EthereumService {
      */
     #matchesActiveConfig(tx, activeConfig) {
         if (!activeConfig || !tx) {
-            console.log('Match fail: No active config or tx provided.');
+            logger.debug('Match fail: No active config or tx provided.');
             return false;
         }
 
@@ -174,12 +248,10 @@ class EthereumService {
 
         for (const rule of validationRules) {
             if (rule.condition()) {
-                // console.log(rule.message());
                 return false;
             }
         }
 
-        // console.log(`Transaction ${tx.hash} MATCHED config ID ${activeConfig.id}`);
         return true;
     }
 
@@ -193,7 +265,7 @@ class EthereumService {
     async #bufferTransaction(tx, activeConfig) {
         try {
             if (!tx.hash || !tx.from || tx.blockNumber === null || tx.value === null) {
-                console.warn(`Transaction ${tx.hash || 'UNKNOWN HASH'} missing essential data. Skipping.`);
+                logger.warn(`Transaction ${tx.hash || 'UNKNOWN HASH'} missing essential data. Skipping.`);
                 return;
             }
 
@@ -212,10 +284,10 @@ class EthereumService {
             const isDuplicate = this.transactionBuffer.some(item => item.hash === tx.hash);
             if (!isDuplicate) {
                 this.transactionBuffer.push(transactionData);
-                console.log(`Added transaction ${tx.hash} to buffer. Buffer size: ${this.transactionBuffer.length}`);
+                logger.debug(`Added transaction ${tx.hash} to buffer. Buffer size: ${this.transactionBuffer.length}`);
             }
         } catch (error) {
-            console.error(`Error buffering transaction ${tx.hash}:`, error);
+            logger.error(`Error buffering transaction ${tx.hash}: ${error.message}\n${error.stack || ''}`);
         }
     }
 
@@ -227,7 +299,7 @@ class EthereumService {
     async #flushTransactionBuffer() {
         if (this.transactionBuffer.length === 0) return;
 
-        console.log(`Flushing transaction buffer with ${this.transactionBuffer.length} transactions`);
+        logger.debug(`Flushing transaction buffer with ${this.transactionBuffer.length} transactions`);
         const transactionsToSave = [...this.transactionBuffer];
         this.transactionBuffer = []; // clear buffer immediately to avoid double processing
 
@@ -242,23 +314,22 @@ class EthereumService {
                 try {
                     const existingTx = await this.Transaction.findByPk(txData.hash);
                     if (existingTx) {
-                        console.log(`Transaction ${txData.hash} already exists in the database. Skipping.`);
+                        logger.debug(`Transaction ${txData.hash} already exists in the database. Skipping.`);
                         saved = true;
                         continue;
                     }
 
                     const savedTx = await this.Transaction.create(txData);
-                    console.log(`Saved transaction ${savedTx.hash} for Config ID ${savedTx.configId} to database.`);
+                    logger.debug(`Saved transaction ${savedTx.hash} for Config ID ${savedTx.configId} to database.`);
                     saved = true;
                     savedCount++;
                 } catch (error) {
                     retryCount++;
                     if (retryCount >= this.maxRetries) {
-                        console.error(`Failed to save transaction ${txData.hash} after ${this.maxRetries} attempts:`, error);
+                        logger.error(`Failed to save transaction ${txData.hash} after ${this.maxRetries} attempts: ${error.message}\n${error.stack || ''}`);
                         failedTransactions.push(txData);
                     } else {
-                        console.warn(`Retry ${retryCount}/${this.maxRetries} for transaction ${txData.hash}`);
-                        // Exponential backoff
+                        logger.warn(`Retry ${retryCount}/${this.maxRetries} for transaction ${txData.hash}`);
                         await new Promise(resolve => setTimeout(resolve, 100 * Math.pow(2, retryCount)));
                     }
                 }
@@ -266,12 +337,12 @@ class EthereumService {
         }
 
         if (failedTransactions.length > 0) {
-            console.warn(`${failedTransactions.length} transactions failed to save after retries.`);
-            // ? re-adding failed txs to buffer for next attempt ?
+            logger.warn(`${failedTransactions.length} transactions failed to save after ${this.maxRetries} retries.`);
+            // failed txs can be re-added to buffer for next attempt if we want
             // this.transactionBuffer.push(...failedTransactions);
         }
 
-        console.log(`Flush complete. Saved: ${savedCount}, Failed: ${failedTransactions.length}`);
+        logger.debug(`Flush complete. Saved: ${savedCount}, Failed: ${failedTransactions.length}`);
     }
 
     /**
@@ -304,7 +375,7 @@ class EthereumService {
                         return (configMinBigInt !== null && txValueBigInt < configMinBigInt) ||
                             (configMaxBigInt !== null && txValueBigInt > configMaxBigInt);
                     } catch (e) {
-                        console.error(`Error comparing transaction value ${tx.value} with config range [${activeConfig.minValue}, ${activeConfig.maxValue}]:`, e);
+                        logger.error(`Error comparing transaction value ${tx.value} with config range [${activeConfig.minValue}, ${activeConfig.maxValue}]: ${e.message}\n${e.stack || ''}`);
                         return true;
                     }
                 },
@@ -336,7 +407,8 @@ class EthereumService {
      * @return {Promise<void>}
      */
     async shutdown() {
-        console.log('Shutting down Ethereum Service...');
+        logger.debug('Shutting down Ethereum Service...');
+        this.isShuttingDown = true;
 
         if (this.flushTimer) {
             clearInterval(this.flushTimer);
@@ -344,18 +416,18 @@ class EthereumService {
         }
 
         if (this.transactionBuffer.length > 0) {
-            console.log(`Flushing ${this.transactionBuffer.length} remaining transactions before shutdown.`);
+            logger.debug(`Flushing ${this.transactionBuffer.length} remaining transactions before shutdown.`);
             await this.#flushTransactionBuffer();
         }
 
         if (this.provider) {
-            console.log('Disconnecting from Ethereum provider.');
+            logger.debug('Disconnecting from Ethereum provider.');
             this.provider.removeAllListeners();
             await this.provider.destroy();
             this.provider = null;
         }
 
-        console.log('EthereumService shutdown complete.');
+        logger.debug('EthereumService shutdown complete.');
     }
 }
 

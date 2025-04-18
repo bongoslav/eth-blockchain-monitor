@@ -28,32 +28,13 @@ class EthereumMonitorService {
 
         await this.blockProcessor.setProvider(this.provider);
         await this.blockProcessor.initialize();
+        await this.blockProcessor.startMonitoring();
+        this.blockProcessor.startBlockLoop();
 
         this.transactionProcessor.startPeriodicFlush();
 
+
         logger.debug('EthereumMonitorService initialized successfully.');
-    }
-
-    /**
-     * Starts monitoring for new blocks from the Ethereum provider
-     * @return {Promise<void>}
-     */
-    async startMonitoring() {
-        if (!this.provider) {
-            logger.error('Provider not initialized.');
-            return;
-        }
-
-        logger.debug('Starting Ethereum block monitoring...');
-        await this.blockProcessor.startMonitoring();
-    }
-
-    /**
-     * "Notifies" the service that the active configuration may have changed.
-     * @return {void}
-     */
-    notifyActiveConfigChanged() {
-        this.blockProcessor.notifyActiveConfigChanged();
     }
 
     /**

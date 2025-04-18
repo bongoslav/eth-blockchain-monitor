@@ -26,7 +26,6 @@ const PORT = process.env.PORT || 3000;
         server = container.resolve('server');
 
         await ethereumService.initialize();
-        await ethereumService.startMonitoring();
 
         runningServer = server.listen(PORT, () => {
             logger.debug(`API Server listening on port ${PORT}`);

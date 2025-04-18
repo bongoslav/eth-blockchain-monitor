@@ -3,8 +3,8 @@
 import logger from '../config/winston.js';
 
 class TransactionProcessorService {
-    constructor({ Transaction, batchSize, flushIntervalMs, maxRetries }) {
-        if (!Transaction || !batchSize || !flushIntervalMs || !maxRetries) {
+    constructor({ Transaction, TXBatchSize, flushTXIntervalMs, saveTxToDBMaxRetries }) {
+        if (!Transaction || !TXBatchSize || !flushTXIntervalMs || !saveTxToDBMaxRetries) {
             throw new Error('TransactionProcessorService missing required dependencies.');
         }
         
@@ -12,9 +12,9 @@ class TransactionProcessorService {
         
         // Transaction buffer configuration
         this.transactionBuffer = new Set();
-        this.batchSize = batchSize;
-        this.flushIntervalMs = flushIntervalMs;
-        this.maxRetries = maxRetries;
+        this.TXBatchSize = TXBatchSize;
+        this.flushTXIntervalMs = flushTXIntervalMs;
+        this.saveTxToDBMaxRetries = saveTxToDBMaxRetries;
         this.flushTimer = null;
 
         // Delayed transactions
@@ -35,7 +35,7 @@ class TransactionProcessorService {
                 logger.debug(`Periodic flush: Processing ${this.transactionBuffer.size} buffered transactions...`);
                 await this.flushTransactionBuffer();
             }
-        }, this.flushIntervalMs);
+        }, this.flushTXIntervalMs);
     }
 
     /**
@@ -70,7 +70,7 @@ class TransactionProcessorService {
         const validationRules = this.#createValidationRules(tx, activeConfig);
 
         for (const rule of validationRules) {
-            if (rule.condition()) {
+            if (rule.condition() === true) {
                 return false; // don't log the messages because it's too much noise
             }
         }
@@ -83,7 +83,7 @@ class TransactionProcessorService {
      * @return {boolean}
      */
     shouldFlushBuffer() {
-        return this.transactionBuffer.size >= this.batchSize;
+        return this.transactionBuffer.size >= this.TXBatchSize;
     }
 
     /**
@@ -159,7 +159,7 @@ class TransactionProcessorService {
             let retryCount = 0;
             let saved = false;
 
-            while (!saved && retryCount < this.maxRetries) {
+            while (!saved && retryCount < this.saveTxToDBMaxRetries) {
                 try {
                     const existingTx = await this.Transaction.findByPk(txData.hash);
                     if (existingTx) {
@@ -174,11 +174,11 @@ class TransactionProcessorService {
                     savedCount++;
                 } catch (error) {
                     retryCount++;
-                    if (retryCount >= this.maxRetries) {
-                        logger.error(`Failed to save transaction ${txData.hash} after ${this.maxRetries} attempts: ${error.message}\n${error.stack || ''}`);
+                    if (retryCount >= this.saveTxToDBMaxRetries) {
+                        logger.error(`Failed to save transaction ${txData.hash} after ${this.saveTxToDBMaxRetries} attempts: ${error.message}\n${error.stack || ''}`);
                         failedTransactions.push(txData);
                     } else {
-                        logger.warn(`Retry ${retryCount}/${this.maxRetries} for transaction ${txData.hash}`);
+                        logger.warn(`Retry ${retryCount}/${this.saveTxToDBMaxRetries} for transaction ${txData.hash}`);
                         await new Promise(resolve => setTimeout(resolve, 100 * Math.pow(2, retryCount)));
                     }
                 }
@@ -186,7 +186,7 @@ class TransactionProcessorService {
         }
 
         if (failedTransactions.length > 0) {
-            logger.warn(`${failedTransactions.length} transactions failed to save after ${this.maxRetries} retries.`);
+            logger.warn(`${failedTransactions.length} transactions failed to save after ${this.saveTxToDBMaxRetries} retries.`);
         }
 
         logger.debug(`Flush complete. Saved: ${savedCount}, Failed: ${failedTransactions.length}`);
@@ -194,6 +194,7 @@ class TransactionProcessorService {
 
     /**
      * Factory method to create validation rules for a transaction against an active configuration
+     * if any returns true, the transaction is not added to the buffer
      * @param {Object} tx - The transaction object
      * @param {Object} activeConfig - The active configuration object
      * @return {Array<{condition: () => boolean, message: () => string}>}
@@ -211,8 +212,6 @@ class TransactionProcessorService {
             },
             {
                 condition: () => {
-                    if (!(activeConfig.minValue || activeConfig.maxValue)) return false;
-
                     try {
                         const txValueBigInt = BigInt(tx.value);
                         const configMinBigInt = activeConfig.minValue ? BigInt(activeConfig.minValue) : null;

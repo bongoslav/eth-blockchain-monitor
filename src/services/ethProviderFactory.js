@@ -50,7 +50,7 @@ class EthereumProviderFactory {
      * @return {Promise<void>}
      */
     async shutdown() {
-        logger.debug('Shutting down Ethereum Provider...');
+        logger.debug('Disconnecting from Ethereum Provider...');
         this.isShuttingDown = true;
         
         if (this.provider) {

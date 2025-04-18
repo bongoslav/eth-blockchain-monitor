@@ -47,11 +47,11 @@ async function configureContainer() {
             configsController: asClass(ConfigsController).singleton(),
             server: asFunction(createServer).singleton(),
 
-            // Ethereum Service configuration
             ethereumWssUrl: asValue(process.env.ETH_WSS_URL),
-            batchSize: asValue(parseInt(process.env.BATCH_SIZE) || 100),
-            flushIntervalMs: asValue(parseInt(process.env.FLUSH_INTERVAL_MS) || 5000),
-            maxRetries: asValue(parseInt(process.env.MAX_RETRIES) || 3),
+            TXBatchSize: asValue(parseInt(process.env.BATCH_SIZE) || 100),
+            flushTXIntervalMs: asValue(parseInt(process.env.FLUSH_INTERVAL_MS) || 5000),
+            saveTxToDBMaxRetries: asValue(parseInt(process.env.SAVE_TX_TO_DB_MAX_RETRIES) || 3),
+            blockLoopIntervalMs: asValue(parseInt(process.env.BLOCK_LOOP_INTERVAL_MS) || 1000),
 
             maxWSSRetries: asValue(parseInt(process.env.MAX_WSS_RETRIES) || 3),
         });

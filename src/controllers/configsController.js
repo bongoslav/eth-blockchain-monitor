@@ -4,12 +4,12 @@ import configSchema from '../validations/configurations.js';
 import logger from '../config/winston.js';
 
 class ConfigsController {
-    constructor({ configsService, ethereumService }) {
-        if (!configsService || !ethereumService) {
-            throw new Error('ConfigsController requires configsService and ethereumService');
+    constructor({ configsService, blockProcessor }) {
+        if (!configsService || !blockProcessor) {
+            throw new Error('ConfigsController missing required dependencies');
         }
         this.configsService = configsService;
-        this.ethereumService = ethereumService;
+        this.blockProcessor = blockProcessor;
     }
 
     // GET /configs/:id
@@ -55,7 +55,7 @@ class ConfigsController {
             const newConfig = await this.configsService.createConfiguration(req.body);
 
             if (newConfig.active === true) {
-                this.ethereumService?.notifyActiveConfigChanged();
+                this.blockProcessor?.notifyActiveConfigChanged();
             }
 
             res.status(201).json(newConfig);
@@ -95,7 +95,7 @@ class ConfigsController {
             const updatedConfig = await this.configsService.updateConfiguration(id, req.body);
             
             if (currentConfig.active === false && req.body.active === true) {
-                this.ethereumService?.notifyActiveConfigChanged();
+                this.blockProcessor?.notifyActiveConfigChanged();
             }
 
             res.json(updatedConfig);

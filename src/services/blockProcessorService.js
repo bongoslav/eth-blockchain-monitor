@@ -3,7 +3,7 @@
 import logger from '../config/winston.js';
 
 class BlockProcessorService {
-    constructor({ transactionProcessor, configsService }) {
+    constructor({ transactionProcessor, configsService, blockLoopIntervalMs }) {
         if (!transactionProcessor || !configsService) {
             throw new Error('BlockProcessorService missing required dependencies.');
         }
@@ -15,6 +15,7 @@ class BlockProcessorService {
         this.blockQueue = [];
         this.isProcessingBlock = false;
         this.isShuttingDown = false;
+        this.blockLoopIntervalMs = blockLoopIntervalMs;
         
         // Active configuration
         this.activeConfig = null;
@@ -49,7 +50,7 @@ class BlockProcessorService {
      * @return {Promise<void>}
      */
     async startMonitoring() {
-        this.provider.on('block', this.handleNewBlock);
+        this.provider.on('block', (blockNumber) => this.blockQueue.push(blockNumber));
         logger.debug('Provider is ready and listening for blocks.');
     }
 
@@ -63,21 +64,23 @@ class BlockProcessorService {
     }
 
     /**
-     * Handles new blocks from the Ethereum provider. Adds to queue and processes sequentially.
-     * @param {number} blockNumber - The number of the new block
+     * Starts the block processing loop using non-blocking intervals
      * @return {void}
      */
-    handleNewBlock = (blockNumber) => {
-        this.blockQueue.push(blockNumber);
-        logger.debug(`New block received: ${blockNumber}. Added to queue. Queue size: ${this.blockQueue.length}`);
-        this.processNextBlockInQueue();
+    startBlockLoop() {
+        logger.debug('Starting block processing loop');
+        this.blockLoopInterval = setInterval(async () => {
+            if (this.blockQueue.length > 0 && !this.isProcessingBlock && !this.isShuttingDown) {
+                await this.#processNextBlockInQueue();
+            }
+        }, this.blockLoopIntervalMs);
     }
 
     /**
      * Processes the next block in the queue if not already processing a block
      * @return {Promise<void>}
      */
-    processNextBlockInQueue = async () => {
+    #processNextBlockInQueue = async () => {
         if (this.isProcessingBlock || this.blockQueue.length === 0 || this.isShuttingDown) {
             return;
         }
@@ -87,14 +90,14 @@ class BlockProcessorService {
 
         try {
             logger.debug(`Processing block ${blockNumber} from queue. Remaining in queue: ${this.blockQueue.length}`);
-            await this.processBlock(blockNumber);
+            await this.#processBlock(blockNumber);
         } catch (error) {
             logger.error(`Error processing block ${blockNumber} from queue: ${error.message}\n${error.stack || ''}`);
         } finally {
             // don't stop processing blocks
             this.isProcessingBlock = false;
             if (this.blockQueue.length > 0) {
-                await this.processNextBlockInQueue();
+                await this.#processNextBlockInQueue();
             }
         }
     }
@@ -104,7 +107,7 @@ class BlockProcessorService {
      * @param {number} blockNumber - The number of the block to process
      * @return {Promise<void>}
      */
-    async processBlock(blockNumber) {
+    async #processBlock(blockNumber) {
         try {
             if (this.isShuttingDown) {
                 logger.warn(`Skipping processing of block ${blockNumber}. Service is shutting down.`);
@@ -173,6 +176,11 @@ class BlockProcessorService {
         logger.debug('Shutting down BlockProcessorService...');
         this.isShuttingDown = true;
         this.blockQueue = []; // clear block queue to prevent further processing
+        
+        if (this.blockLoopInterval) {
+            clearInterval(this.blockLoopInterval);
+            this.blockLoopInterval = null;
+        }
     }
 }
 

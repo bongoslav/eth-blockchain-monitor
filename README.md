@@ -1,7 +1,7 @@
 # Ethereum blockchain transactions monitor
 
 Monitor ethereum transactions based on dynamic configurations.  
-Used packages: express, ethers, sqlite3, sequelize, joi, nodemon.  
+Used packages: express, awilix, ethers, sqlite3, sequelize, joi, nodemon.  
 ***Tested with _Infura_ WSS RPC URL on Ethereum Sepolia.***
 
 ## Getting Started
@@ -57,3 +57,5 @@ npm run db:migrate:undo:all
 - asd
 - asd
 - asd
+
+## Endpoints

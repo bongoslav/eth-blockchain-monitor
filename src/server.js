@@ -2,6 +2,7 @@
 
 import express from 'express';
 import createConfigsRouter from './routes/configsRoutes.js';
+import logger from './config/winston.js';
 
 function createServer({ configsController }) {
 	if (!configsController) {
@@ -25,7 +26,7 @@ function createServer({ configsController }) {
 	});
 
 	app.use((err, req, res, next) => {
-		console.error('[Unhandled API Error]:', err);
+		logger.error(`[Unhandled API Error]: ${err.message}\n${err.stack || ''}`);
 		const statusCode = err.statusCode || 500;
 		const message = process.env.NODE_ENV === 'production' && statusCode === 500
 			? 'Internal Server Error'

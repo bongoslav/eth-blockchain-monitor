@@ -1,6 +1,7 @@
 'use strict';
 
 import configSchema from '../validations/configurations.js';
+import logger from '../config/winston.js';
 
 class ConfigsController {
     constructor({ configsService, ethereumService }) {
@@ -13,7 +14,7 @@ class ConfigsController {
 
     // GET /configs/:id
     async getConfiguration(req, res, next) {
-        console.log('getConfiguration called');
+        logger.debug('getConfiguration called');
         try {
             const id = parseInt(req.params.id, 10);
             if (isNaN(id)) {
@@ -32,7 +33,7 @@ class ConfigsController {
 
     // GET /configs
     async getConfigurations(req, res, next) {
-        console.log('getConfigurations called');
+        logger.debug('getConfigurations called');
         try {
             const configs = await this.configsService.getConfigurations();
             res.json(configs);
@@ -43,11 +44,11 @@ class ConfigsController {
 
     // POST /configs
     async createConfiguration(req, res, next) {
-        console.log('createConfiguration called');
+        logger.debug('createConfiguration called');
         try {
             const validateResult = configSchema.createConfiguration.validate(req.body);
             if (validateResult.error) {
-                console.log(validateResult.error.message);
+                logger.debug(validateResult.error.message);
                 return res.status(400).json({ error: validateResult.error.message });
             }
 
@@ -63,7 +64,7 @@ class ConfigsController {
 
     // PUT /configs/:id
     async updateConfiguration(req, res, next) {
-        console.log('updateConfiguration called');
+        logger.debug('updateConfiguration called');
         try {
             const id = parseInt(req.params.id, 10);
             if (isNaN(id)) {
@@ -72,7 +73,7 @@ class ConfigsController {
 
             const validateResult = configSchema.updateConfiguration.validate(req.body);
             if (validateResult.error) {
-                console.log(validateResult.error.message);
+                logger.debug(validateResult.error.message);
                 return res.status(400).json({ error: validateResult.error.message });
             }
 
@@ -103,7 +104,7 @@ class ConfigsController {
 
     // DELETE /configs/:id
     async deleteConfiguration(req, res, next) {
-        console.log('deleteConfiguration called');
+        logger.debug('deleteConfiguration called');
         try {
             const id = parseInt(req.params.id, 10);
             if (isNaN(id)) {

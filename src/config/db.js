@@ -3,6 +3,7 @@
 import { Sequelize } from 'sequelize';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import logger from './winston.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,9 +19,9 @@ const sequelize = new Sequelize({
 const initializeDatabase = async () => {
   try {
     await sequelize.authenticate();
-    console.log('Database connection has been established successfully.');
+    logger.debug('Database connection has been established successfully.');
   } catch (error) {
-    console.error('Unable to connect to the database:', error);
+    logger.error(`Unable to connect to the database: ${error.message}\n${error.stack || ''}`);
     throw error;
   }
 };

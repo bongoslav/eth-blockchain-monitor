@@ -1,6 +1,7 @@
 'use strict';
 
 import { Op } from 'sequelize';
+import logger from '../config/winston.js';
 
 function createConfigsRepository({ ConfigModel }) {
 	if (!ConfigModel) {
@@ -57,7 +58,7 @@ function createConfigsRepository({ ConfigModel }) {
 
 			updatedConfig = await findById(id);
 		} catch (error) {
-			console.error('Transaction failed in update:', error);
+			logger.error(`Transaction failed in update: ${error.message}\n${error.stack || ''}`);
 			throw error;
 		}
 

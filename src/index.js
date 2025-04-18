@@ -1,5 +1,6 @@
 'use strict';
 
+import logger from './config/winston.js';
 import configureContainer from './container.js';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -21,16 +22,16 @@ const PORT = process.env.PORT || 3000;
         sequelize = container.resolve('sequelize');
         server = container.resolve('server');
 
-        // await ethereumService.initialize();
-        // await ethereumService.startMonitoring();
+        await ethereumService.initialize();
+        await ethereumService.startMonitoring();
 
         runningServer = server.listen(PORT, () => {
-            console.log(`API Server listening on port ${PORT}`);
+            logger.debug(`API Server listening on port ${PORT}`);
         });
 
-        console.log('Ethereum Monitor application backend started successfully.');
+        logger.debug('Ethereum Monitor application backend started successfully.');
     } catch (error) {
-        console.error('Application failed to start:', error);
+        logger.error(`Application failed to start: ${error.message}\n${error.stack || ''}`);
         if (runningServer) {
             runningServer.close();
         }
@@ -38,23 +39,23 @@ const PORT = process.env.PORT || 3000;
     }
 
     process.on('SIGINT', async () => {
-        console.log('\nShutting down gracefully...');
+        logger.debug('\nShutting down gracefully...');
         try {
             await ethereumService.shutdown();
-            console.log('Ethereum Service closed.');
+            logger.debug('Ethereum Service closed.');
 
             if (runningServer) {
                 await runningServer.close();
-                console.log('API Server closed.');
+                logger.debug('API Server closed.');
             }
             if (sequelize) {
                 await sequelize.close();
-                console.log('Database connection closed');
+                logger.debug('Database connection closed');
             }
         } catch (error) {
-            console.error('Error during shutdown:', error);
+            logger.error(`Error during shutdown: ${error.message}\n${error.stack || ''}`);
         } finally {
-            console.log('Exiting');
+            logger.debug('Exiting');
             process.exit(0);
         }
     });

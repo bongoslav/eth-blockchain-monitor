@@ -1,18 +1,11 @@
 'use strict';
 
 import { Sequelize } from 'sequelize';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import logger from './winston.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const storagePath = path.resolve(__dirname, '../../data/database.sqlite');
-
 const sequelize = new Sequelize({
-  dialect: 'sqlite',
-  storage: storagePath,
+  dialect: process.env.DB_DIALECT || 'sqlite',
+  storage: process.env.DB_STORAGE_PATH || './data/database.sqlite',
   logging: false,
 });
 

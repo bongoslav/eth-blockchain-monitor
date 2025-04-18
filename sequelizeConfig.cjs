@@ -2,7 +2,7 @@ const path = require('path');
 
 module.exports = {
   development: {
-    dialect: 'sqlite',
-    storage: path.resolve('data', 'database.sqlite'),
+    dialect: process.env.DB_DIALECT || 'sqlite',
+    storage: process.env.DB_STORAGE_PATH || './data/database.sqlite',
   },
 };

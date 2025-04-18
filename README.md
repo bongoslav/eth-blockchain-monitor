@@ -64,13 +64,13 @@ npm run db:migrate:undo:all
 
 Local url: `http://localhost:3000`
 
-| Method | Endpoint     | Description           | Request Body Example                                                     |
-| ------ | ------------ | --------------------- | ------------------------------------------------------------------------ |
-| GET    | /configs     | Get all configs       | –                                                                        |
-| GET    | /configs/:id | Get a config by ID    | –                                                                        |
-| POST   | /configs     | Create a new config   | `{ "name": "at least 0.01" "minValue": "10000000000000000", "type": 2 }` |
-| PUT    | /configs/:id | Update a config by ID | `{ "active": true, "minBlockNumber": 8888888 }`                          |
-| DELETE | /configs/:id | Delete config         | –                                                                        |
+| Method | Endpoint     | Description           | Request Body Example                                                                                 |
+| ------ | ------------ | --------------------- | ---------------------------------------------------------------------------------------------------- |
+| GET    | /configs     | Get all configs       | –                                                                                                    |
+| GET    | /configs/:id | Get a config by ID    | –                                                                                                    |
+| POST   | /configs     | Create a new config   | `{ "name": "1 ETH with delay", "blockDelay": 2, "minValue": "1000000000000000000", "active": true }` |
+| PUT    | /configs/:id | Update a config by ID | `{ "active": true, "minBlockNumber": 8888888 }`                                                      |
+| DELETE | /configs/:id | Delete config         | –                                                                                                    |
 
 <details>
 <summary>Request bodies</summary>
@@ -92,6 +92,7 @@ Local url: `http://localhost:3000`
 | maxIndex       | number  | no       | min: 0         |
 | type           | number  | no       | min: 0         |
 | active         | boolean | no       | default: false |
+| blockDelay     | number  | no       | min: 0         |
 
 ### Update Configuration
 
@@ -109,12 +110,14 @@ Local url: `http://localhost:3000`
 | maxIndex       | number  | no       | min: 0           |
 | type           | number  | no       | min: 0           |
 | active         | boolean | no       | strictly boolean |
+| blockDelay     | number  | no       | min: 0           |
 
 </details>
 
 ## Features
 
-All of the required features are done while ensuring clean architecture and applying design patterns.
+All of the required features are done while ensuring clean architecture and applying design patterns.  
+Also, I tried to cover the edge cases around activating a configuration dynamically.
 
 ## Flow
 

@@ -30,7 +30,7 @@ npm install
 cp .env.example .env
 ```
 
-2. Open `.env` and fill at least your provider's WSS RPC url. There are default values for the other fields.
+2. Open `.env` and fill your **provider's WSS RPC url**. There are default values for the other fields.
 
 ```bash
 ETH_WSS_URL=wss://sepolia.infura.io/ws/v3/123
@@ -59,12 +59,6 @@ npm run db:migrate:undo
 ```bash
 npm run db:migrate:undo:all
 ```
-
-## Features
-
-- asd
-- asd
-- asd
 
 ## Endpoints for the Configurations
 
@@ -118,27 +112,66 @@ Local url: `http://localhost:3000`
 
 </details>
 
+## Features
+
+All of the required features are done while ensuring clean architecture and applying design patterns.
+
+## Flow
+
+Ethereum monitor service acts as the entry point.
+
+1. Provider is created from a factory
+
+   - Establishes WebSocket connection to Ethereum network
+
+2. System initialization
+
+   - Block processor starts monitoring for new blocks
+   - Sets up block processing queue and interval loop
+   - Transaction processor starts periodic buffer flush timer
+
+3. Processing workflow
+
+   - New blocks are queued when received
+   - Blocks are processed according to active configuration
+     - infinite interval checks for the queue of blocks when current block is processed
+   - Matching transactions are buffered
+   - Transactions are flushed to database when:
+     - Buffer reaches batch size threshold
+     - Periodic flush timer triggers
+     - Block processing completes
+   - there is handling for delayed transactions processing
+
+4. Configuration
+   - REST API allows dynamic configuration management
+   - Configurations determine which transactions to capture **from next block**
+
 ## Database Schema
 
 ### Table: `configs`
 
-| Column         | Type     | Constraints                 | Description                 |
-| -------------- | -------- | --------------------------- | --------------------------- |
-| id             | INTEGER  | Primary Key, Auto Increment | Unique identifier           |
-| name           | STRING   | Nullable                    | Optional name               |
-| hash           | STRING   | Nullable                    | Optional hash value         |
-| fromAddress    | STRING   | Nullable                    | Filter: from address        |
-| toAddress      | STRING   | Nullable                    | Filter: to address          |
-| minValue       | STRING   | Nullable                    | Minimum value in Wei        |
-| maxValue       | STRING   | Nullable                    | Maximum value in Wei        |
-| minBlockNumber | INTEGER  | Nullable                    | Minimum block number        |
-| maxBlockNumber | INTEGER  | Nullable                    | Maximum block number        |
-| minIndex       | INTEGER  | Nullable                    | Minimum transaction index   |
-| maxIndex       | INTEGER  | Nullable                    | Maximum transaction index   |
-| type           | INTEGER  | Nullable                    | Transaction type filter     |
-| active         | BOOLEAN  | Not Null, Default: `false`  | Is it current active config |
-| createdAt      | DATETIME | Auto-generated              | Timestamp of creation       |
-| updatedAt      | DATETIME | Auto-generated              | Timestamp of last update    |
+| Column         | Type     | Constraints                 | Description                  |
+| -------------- | -------- | --------------------------- | ---------------------------- |
+| id             | INTEGER  | Primary Key, Auto Increment | Unique identifier            |
+| name           | STRING   | Nullable                    | Optional name                |
+| hash           | STRING   | Nullable                    | Optional hash value          |
+| fromAddress    | STRING   | Nullable                    | Filter: from address         |
+| toAddress      | STRING   | Nullable                    | Filter: to address           |
+| minValue       | STRING   | Nullable                    | Minimum value in Wei         |
+| maxValue       | STRING   | Nullable                    | Maximum value in Wei         |
+| minBlockNumber | INTEGER  | Nullable                    | Minimum block number         |
+| maxBlockNumber | INTEGER  | Nullable                    | Maximum block number         |
+| minIndex       | INTEGER  | Nullable                    | Minimum transaction index    |
+| maxIndex       | INTEGER  | Nullable                    | Maximum transaction index    |
+| type           | INTEGER  | Nullable                    | Transaction type filter      |
+| active         | BOOLEAN  | Not Null, Default: `false`  | Is it current active config  |
+| blockDelay     | number   | Nullable                    | Delay to start processing TX |
+| createdAt      | DATETIME | Auto-generated              | Timestamp of creation        |
+| updatedAt      | DATETIME | Auto-generated              | Timestamp of last update     |
+
+**Additional indexes**
+
+- Index on `active` column
 
 **Associations**:
 

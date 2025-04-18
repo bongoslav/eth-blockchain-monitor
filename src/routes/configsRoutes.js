@@ -15,9 +15,6 @@ function createConfigsRouter({ configsController }) {
 	router.put('/configs/:id', (req, res, next) => configsController.updateConfiguration(req, res, next));
 	router.delete('/configs/:id', (req, res, next) => configsController.deleteConfiguration(req, res, next));
 
-	// router.post('/monitor/config/:id', (req, res, next) => configsController.setActiveMonitoringConfig(req, res, next));
-	// router.delete('/monitor/config', (req, res, next) => configsController.deactivateMonitoringConfig(req, res, next));
-
 	return router;
 }
 

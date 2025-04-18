@@ -60,6 +60,11 @@ class Config extends Model {
 				defaultValue: false,
 				allowNull: false,
 			},
+			blockDelay: {
+				type: DataTypes.INTEGER,
+				allowNull: true,
+				comment: 'Number of blocks to wait before processing matching transactions'
+			},
 		}, {
 			sequelize,
 			modelName: 'Config',

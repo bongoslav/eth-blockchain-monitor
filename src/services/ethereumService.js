@@ -24,7 +24,7 @@ class EthereumService {
         this.provider = null;
 
         // Transaction buffer configuration
-        this.transactionBuffer = [];
+        this.transactionBuffer = new Set();
         this.batchSize = batchSize;
         this.flushIntervalMs = flushIntervalMs;
         this.maxRetries = maxRetries;
@@ -33,10 +33,13 @@ class EthereumService {
         // WSS connection configuration
         this.maxWSSRetries = maxWSSRetries;
         this.isShuttingDown = false;
-        
+
         // Block processing queue
         this.blockQueue = [];
         this.isProcessingBlock = false;
+
+        // Delayed transactions
+        this.pendingBlockQueue = new Map();
     }
 
     /**
@@ -126,8 +129,8 @@ class EthereumService {
         }
 
         this.flushTimer = setInterval(async () => {
-            if (this.transactionBuffer.length > 0) {
-                logger.debug(`Periodic flush: Processing ${this.transactionBuffer.length} buffered transactions...`);
+            if (this.transactionBuffer.size > 0) {
+                logger.debug(`Periodic flush: Processing ${this.transactionBuffer.size} buffered transactions...`);
                 await this.#flushTransactionBuffer();
             }
         }, this.flushIntervalMs);
@@ -151,13 +154,13 @@ class EthereumService {
      * @private
      */
     #processNextBlockInQueue = async () => {
-        if (this.isProcessingBlock || this.blockQueue.length === 0) {
+        if (this.isProcessingBlock || this.blockQueue.length === 0 || this.isShuttingDown) {
             return;
         }
 
         this.isProcessingBlock = true;
         const blockNumber = this.blockQueue.shift();
-        
+
         try {
             logger.debug(`Processing block ${blockNumber} from queue. Remaining in queue: ${this.blockQueue.length}`);
             await this.#processBlock(blockNumber);
@@ -180,6 +183,11 @@ class EthereumService {
      */
     async #processBlock(blockNumber) {
         try {
+            if (this.isShuttingDown) {
+                logger.warn(`Skipping processing of block ${blockNumber}. Service is shutting down.`);
+                return;
+            }
+            
             if (this.activeConfigNeedsUpdate) {
                 const newActiveConfig = await this.configsService.getActiveConfig();
 
@@ -192,6 +200,16 @@ class EthereumService {
             if (!this.activeConfig) {
                 logger.debug('No active configuration set. Skipping block processing.');
                 return;
+            }
+
+            if (this.pendingBlockQueue.has(blockNumber)) {
+                const transactions = this.pendingBlockQueue.get(blockNumber);
+                logger.debug(`Found ${transactions.length} delayed transactions for block ${blockNumber}. Adding to buffer.`);
+
+                for (const tx of transactions) {
+                    this.transactionBuffer.add(tx.transactionData);
+                }
+                this.pendingBlockQueue.delete(blockNumber);
             }
 
             const block = await this.provider.getBlock(blockNumber, true);
@@ -211,7 +229,7 @@ class EthereumService {
                     await this.#bufferTransaction(fullTx, this.activeConfig);
                     matchCount++;
 
-                    if (this.transactionBuffer.length >= this.batchSize) {
+                    if (this.transactionBuffer.size >= this.batchSize) {
                         await this.#flushTransactionBuffer();
                     }
                 }
@@ -222,7 +240,7 @@ class EthereumService {
             }
 
             // ensuring any remaining transactions from this block are flushed
-            if (this.transactionBuffer.length > 0) {
+            if (this.transactionBuffer.size > 0) {
                 await this.#flushTransactionBuffer();
             }
 
@@ -280,11 +298,23 @@ class EthereumService {
                 configId: activeConfig.id,
             };
 
-            // Check if already in buffer (avoid duplicates)
-            const isDuplicate = this.transactionBuffer.some(item => item.hash === tx.hash);
-            if (!isDuplicate) {
-                this.transactionBuffer.push(transactionData);
-                logger.debug(`Added transaction ${tx.hash} to buffer. Buffer size: ${this.transactionBuffer.length}`);
+            if (activeConfig.blockDelay) {
+                const targetBlock = tx.blockNumber + activeConfig.blockDelay;
+
+                if (!this.pendingBlockQueue.has(targetBlock)) {
+                    this.pendingBlockQueue.set(targetBlock, []);
+                }
+
+                this.pendingBlockQueue.get(targetBlock).push({
+                    transactionData,
+                    configId: activeConfig.id
+                });
+            } else {
+                const isDuplicate = this.transactionBuffer.has(transactionData);
+                if (!isDuplicate) {
+                    this.transactionBuffer.add(transactionData);
+                    logger.debug(`Added transaction ${tx.hash} to buffer. Buffer size: ${this.transactionBuffer.size}`);
+                }
             }
         } catch (error) {
             logger.error(`Error buffering transaction ${tx.hash}: ${error.message}\n${error.stack || ''}`);
@@ -297,11 +327,11 @@ class EthereumService {
      * @private
      */
     async #flushTransactionBuffer() {
-        if (this.transactionBuffer.length === 0) return;
+        if (this.transactionBuffer.size === 0) return;
 
-        logger.debug(`Flushing transaction buffer with ${this.transactionBuffer.length} transactions`);
+        logger.debug(`Flushing transaction buffer with ${this.transactionBuffer.size} transactions`);
         const transactionsToSave = [...this.transactionBuffer];
-        this.transactionBuffer = []; // clear buffer immediately to avoid double processing
+        this.transactionBuffer.clear(); // clear buffer immediately to avoid double processing
 
         let savedCount = 0;
         let failedTransactions = [];
@@ -339,7 +369,6 @@ class EthereumService {
         if (failedTransactions.length > 0) {
             logger.warn(`${failedTransactions.length} transactions failed to save after ${this.maxRetries} retries.`);
             // failed txs can be re-added to buffer for next attempt if we want
-            // this.transactionBuffer.push(...failedTransactions);
         }
 
         logger.debug(`Flush complete. Saved: ${savedCount}, Failed: ${failedTransactions.length}`);
@@ -410,13 +439,15 @@ class EthereumService {
         logger.debug('Shutting down Ethereum Service...');
         this.isShuttingDown = true;
 
+        this.blockQueue = []; // clear block queue to prevent further processing and race conditions
+        
         if (this.flushTimer) {
             clearInterval(this.flushTimer);
             this.flushTimer = null;
         }
 
-        if (this.transactionBuffer.length > 0) {
-            logger.debug(`Flushing ${this.transactionBuffer.length} remaining transactions before shutdown.`);
+        if (this.transactionBuffer.size > 0) {
+            logger.debug(`Flushing ${this.transactionBuffer.size} remaining transactions before shutdown.`);
             await this.#flushTransactionBuffer();
         }
 

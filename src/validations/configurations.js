@@ -13,6 +13,7 @@ const updateConfiguration = Joi.object({
     maxIndex: Joi.number().min(0),
     type: Joi.number().min(0),
     active: Joi.boolean().strict(),
+    blockDelay: Joi.number().min(0),
 });
 
 const createConfiguration = Joi.object({
@@ -28,6 +29,7 @@ const createConfiguration = Joi.object({
     maxIndex: Joi.number().min(0),
     type: Joi.number().min(0),
     active: Joi.boolean().default(false),
+    blockDelay: Joi.number().min(0),
 });
 
 const configSchema = {

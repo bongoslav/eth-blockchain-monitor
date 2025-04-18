@@ -72,6 +72,8 @@ module.exports = {
 				allowNull: false,
 			},
 		});
+
+		await queryInterface.addIndex('configs', ['active']);
 	},
 
 	async down(queryInterface) {

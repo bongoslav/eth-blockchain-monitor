@@ -70,6 +70,11 @@ class Config extends Model {
 			modelName: 'Config',
 			tableName: 'configs',
 			timestamps: true,
+			indexes: [
+				{
+					fields: ['active'],
+				}
+			]
 		});
 		return this;
 	}

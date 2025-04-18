@@ -8,7 +8,6 @@ Used packages: express, awilix, ethers, sqlite3, sequelize, joi, winston, nodemo
 
 ### Prerequisites
 
-- Node.js
 - npm
 - WSS RPC URL
 
@@ -43,15 +42,20 @@ ETH_WSS_URL=wss://sepolia.infura.io/ws/v3/123
 npm run db:migrate
 ```
 
-4. Run in development mode
+4. Run
 
 ```bash
-npm run dev
+node src/index.js
 ```
 
 ### Other scripts
 
-- Migration related
+Run in dev mode
+```bash
+npm run dev
+```
+
+Migrations undo
 
 ```bash
 npm run db:migrate:undo

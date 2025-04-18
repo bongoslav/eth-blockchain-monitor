@@ -136,8 +136,8 @@ class BlockProcessorService {
             }
 
             const transactionHashes = block.transactions;
-            logger.debug(`Block ${blockNumber} contains ${transactionHashes.length} transaction hashes.` +
-                `Filtering with active config: ID(${this.activeConfig?.id}), Name(${this.activeConfig?.name}).`
+            logger.debug(`Block ${blockNumber} contains ${transactionHashes.length} transactions. ` +
+                `Filtering with active config: ID (${this.activeConfig?.id}), Name (${this.activeConfig?.name})...`
             );
 
             let matchCount = 0;

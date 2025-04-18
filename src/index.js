@@ -18,6 +18,9 @@ const PORT = process.env.PORT || 3000;
     try {
         container = await configureContainer();
 
+        const providerFactory = container.resolve('providerFactory');
+        await providerFactory.createProvider();
+
         ethereumService = container.resolve('ethereumService');
         sequelize = container.resolve('sequelize');
         server = container.resolve('server');

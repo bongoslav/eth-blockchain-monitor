@@ -4,7 +4,10 @@ import { createContainer, asClass, asFunction, asValue } from 'awilix';
 import { initializeDatabase, sequelize } from './config/db.js';
 import { initModels } from './models/index.js';
 import ConfigsService from './services/configsService.js';
-import EthereumService from './services/ethereumService.js';
+import EthereumMonitorService from './services/ethereumMonitorService.js';
+import TransactionProcessorService from './services/transactionProcessorService.js';
+import BlockProcessorService from './services/blockProcessorService.js';
+import EthereumProviderFactory from './services/ethProviderFactory.js';
 import createConfigsRepository from './repositories/configsRepository.js';
 import dotenv from 'dotenv';
 import createServer from './server.js';
@@ -34,8 +37,11 @@ async function configureContainer() {
             configsRepository: asFunction(({ Config }) => createConfigsRepository({ ConfigModel: Config })).singleton(),
 
             // Services
+            providerFactory: asClass(EthereumProviderFactory).singleton(),
+            transactionProcessor: asClass(TransactionProcessorService).singleton(),
+            blockProcessor: asClass(BlockProcessorService).singleton(),
             configsService: asClass(ConfigsService).singleton(),
-            ethereumService: asClass(EthereumService).singleton(),
+            ethereumService: asClass(EthereumMonitorService).singleton(),
 
             // API Components
             configsController: asClass(ConfigsController).singleton(),

@@ -1,28 +1,15 @@
 'use strict';
 
-import { WebSocketProvider } from 'ethers';
 import logger from '../config/winston.js';
 
-class EthereumService {
-    constructor({
-        ethereumWssUrl,
-        configsService,
-        Transaction,
-        batchSize,
-        flushIntervalMs,
-        maxRetries,
-        maxWSSRetries
-    }) {
-        if (!ethereumWssUrl || !configsService || !Transaction) {
-            throw new Error('EthereumService requires ethereumWssUrl, configsService, and Transaction dependencies.');
+class TransactionProcessorService {
+    constructor({ Transaction, batchSize, flushIntervalMs, maxRetries }) {
+        if (!Transaction || !batchSize || !flushIntervalMs || !maxRetries) {
+            throw new Error('TransactionProcessorService missing required dependencies.');
         }
-        this.providerUrl = ethereumWssUrl;
-        this.configsService = configsService;
+        
         this.Transaction = Transaction;
-        this.activeConfig = null;
-        this.activeConfigNeedsUpdate = true; // flag to signal config refresh needed. initially get current active config
-        this.provider = null;
-
+        
         // Transaction buffer configuration
         this.transactionBuffer = new Set();
         this.batchSize = batchSize;
@@ -30,100 +17,15 @@ class EthereumService {
         this.maxRetries = maxRetries;
         this.flushTimer = null;
 
-        // WSS connection configuration
-        this.maxWSSRetries = maxWSSRetries;
-        this.isShuttingDown = false;
-
-        // Block processing queue
-        this.blockQueue = [];
-        this.isProcessingBlock = false;
-
         // Delayed transactions
         this.pendingBlockQueue = new Map();
     }
 
     /**
-     * Initializes the Ethereum service. Connects to WS url, gets active config, and starts periodic flush.
-     * @return {Promise<void>}
-     */
-    async initialize() {
-        if (this.provider) {
-            this.provider.removeAllListeners();
-            try {
-                await this.provider.destroy();
-            } catch (e) {
-                logger.warn(`Error destroying old provider: ${e.message}`);
-            }
-        }
-
-        let retryCount = 0;
-        logger.debug('Initializing EthereumService...');
-        this.provider = new WebSocketProvider(this.providerUrl);
-
-        this.provider.on('error', async (error) => {
-            logger.error(`WebSocket Provider Error: ${error.message}\n${error.stack || ''}`);
-
-            if (this.isShuttingDown) return; // don't reconnect if shutting down
-
-            logger.debug('Attempting to reconnect...');
-
-            retryCount++;
-
-            logger.warn(`Retrying connection (attempt ${retryCount}/${this.maxWSSRetries})`);
-
-            await new Promise(resolve => setTimeout(resolve, 100 * Math.pow(2, retryCount)));
-
-            if (retryCount >= this.maxWSSRetries) {
-                await this.shutdown();
-                logger.error('Failed to reconnect after maximum attempts. Exiting...');
-                process.exit(1);
-            }
-
-            await this.initialize();
-        });
-
-        this.activeConfig = await this.configsService.getActiveConfig();
-        if (!this.activeConfig) {
-            logger.debug('EthereumService initialized. No active configuration set.');
-        } else {
-            logger.debug(`EthereumService initialized. Active configuration set to '${this.activeConfig.name}' (ID: ${this.activeConfig.id}).`);
-        }
-        this.activeConfigNeedsUpdate = false; // Initial config loaded
-
-        this.#startPeriodicFlush();
-    }
-
-    /**
-     * Starts monitoring for new blocks from the Ethereum provider
-     * @return {Promise<void>}
-     */
-    async startMonitoring() {
-        if (!this.provider) {
-            logger.warn('Provider not initialized. Initializing...');
-            await this.initialize();
-        }
-
-        logger.debug('Starting Ethereum block monitoring...');
-        this.provider.on('block', this.#handleNewBlock);
-
-        logger.debug('Provider is ready and listening for blocks.');
-    }
-
-    /**
-     * "Notifies" the service that the active configuration may have changed.
+     * Start the periodic flush timer
      * @return {void}
      */
-    notifyActiveConfigChanged() {
-        logger.debug('Active config UPDATED. Next block will use new config.');
-        this.activeConfigNeedsUpdate = true;
-    }
-
-    /**
-     * Starts a timer that periodically flushes the transaction buffer
-     * @return {Promise<void>}
-     * @private
-     */
-    async #startPeriodicFlush() {
+    startPeriodicFlush() {
         if (this.flushTimer) {
             clearInterval(this.flushTimer);
         }
@@ -131,121 +33,25 @@ class EthereumService {
         this.flushTimer = setInterval(async () => {
             if (this.transactionBuffer.size > 0) {
                 logger.debug(`Periodic flush: Processing ${this.transactionBuffer.size} buffered transactions...`);
-                await this.#flushTransactionBuffer();
+                await this.flushTransactionBuffer();
             }
         }, this.flushIntervalMs);
     }
 
     /**
-     * Handles new blocks from the Ethereum provider. Adds to queue and processes sequentially.
-     * @param {number} blockNumber - The number of the new block
-     * @return {void}
-     * @private
-     */
-    #handleNewBlock = (blockNumber) => {
-        this.blockQueue.push(blockNumber);
-        logger.debug(`New block received: ${blockNumber}. Added to queue. Queue size: ${this.blockQueue.length}`);
-        this.#processNextBlockInQueue();
-    }
-
-    /**
-     * Processes the next block in the queue if not already processing a block
+     * Process pending transactions for a specific block
+     * @param {number} blockNumber - The block number to process pending transactions for
      * @return {Promise<void>}
-     * @private
      */
-    #processNextBlockInQueue = async () => {
-        if (this.isProcessingBlock || this.blockQueue.length === 0 || this.isShuttingDown) {
-            return;
-        }
+    async processPendingTransactions(blockNumber) {
+        if (this.pendingBlockQueue.has(blockNumber)) {
+            const transactions = this.pendingBlockQueue.get(blockNumber);
+            logger.debug(`Found ${transactions.length} delayed transactions for block ${blockNumber}. Adding to buffer.`);
 
-        this.isProcessingBlock = true;
-        const blockNumber = this.blockQueue.shift();
-
-        try {
-            logger.debug(`Processing block ${blockNumber} from queue. Remaining in queue: ${this.blockQueue.length}`);
-            await this.#processBlock(blockNumber);
-        } catch (error) {
-            logger.error(`Error processing block ${blockNumber} from queue: ${error.message}\n${error.stack || ''}`);
-        } finally {
-            // don't stop processing blocks
-            this.isProcessingBlock = false;
-            if (this.blockQueue.length > 0) {
-                await this.#processNextBlockInQueue();
+            for (const tx of transactions) {
+                this.transactionBuffer.add(tx.transactionData);
             }
-        }
-    }
-
-    /**
-     * Processes a single block and its transactions
-     * @param {number} blockNumber - The number of the block to process
-     * @return {Promise<void>}
-     * @private
-     */
-    async #processBlock(blockNumber) {
-        try {
-            if (this.isShuttingDown) {
-                logger.warn(`Skipping processing of block ${blockNumber}. Service is shutting down.`);
-                return;
-            }
-            
-            if (this.activeConfigNeedsUpdate) {
-                const newActiveConfig = await this.configsService.getActiveConfig();
-
-                this.activeConfig = newActiveConfig;
-                this.activeConfigNeedsUpdate = false;
-
-                logger.debug(`Active config set to ${newActiveConfig.id}.`);
-            }
-
-            if (!this.activeConfig) {
-                logger.debug('No active configuration set. Skipping block processing.');
-                return;
-            }
-
-            if (this.pendingBlockQueue.has(blockNumber)) {
-                const transactions = this.pendingBlockQueue.get(blockNumber);
-                logger.debug(`Found ${transactions.length} delayed transactions for block ${blockNumber}. Adding to buffer.`);
-
-                for (const tx of transactions) {
-                    this.transactionBuffer.add(tx.transactionData);
-                }
-                this.pendingBlockQueue.delete(blockNumber);
-            }
-
-            const block = await this.provider.getBlock(blockNumber, true);
-            if (!block || !block.transactions) {
-                logger.warn(`Block ${blockNumber} not found or has no transactions.`);
-                return;
-            }
-
-            const transactionHashes = block.transactions;
-            logger.debug(`Block ${blockNumber} contains ${transactionHashes.length} transaction hashes. Filtering with active config ID: ${this.activeConfig.id}`);
-
-            let matchCount = 0;
-            for (const txHash of transactionHashes) {
-                const fullTx = await this.provider.getTransaction(txHash);
-
-                if (fullTx && this.#matchesActiveConfig(fullTx, this.activeConfig)) {
-                    await this.#bufferTransaction(fullTx, this.activeConfig);
-                    matchCount++;
-
-                    if (this.transactionBuffer.size >= this.batchSize) {
-                        await this.#flushTransactionBuffer();
-                    }
-                }
-            }
-
-            if (matchCount > 0) {
-                logger.debug(`Found and buffered ${matchCount} matching transactions in block ${blockNumber}.`);
-            }
-
-            // ensuring any remaining transactions from this block are flushed
-            if (this.transactionBuffer.size > 0) {
-                await this.#flushTransactionBuffer();
-            }
-
-        } catch (err) {
-            logger.error(`Error processing block ${blockNumber}: ${err.message}\n${err.stack || ''}`);
+            this.pendingBlockQueue.delete(blockNumber);
         }
     }
 
@@ -254,9 +60,8 @@ class EthereumService {
      * @param {Object} tx - The transaction object
      * @param {Object} activeConfig - The active configuration object
      * @return {boolean}
-     * @private
      */
-    #matchesActiveConfig(tx, activeConfig) {
+    matchesActiveConfig(tx, activeConfig) {
         if (!activeConfig || !tx) {
             logger.debug('Match fail: No active config or tx provided.');
             return false;
@@ -266,7 +71,7 @@ class EthereumService {
 
         for (const rule of validationRules) {
             if (rule.condition()) {
-                return false;
+                return false; // don't log the messages because it's too much noise
             }
         }
 
@@ -274,13 +79,28 @@ class EthereumService {
     }
 
     /**
+     * Check if the buffer should be flushed based on size
+     * @return {boolean}
+     */
+    shouldFlushBuffer() {
+        return this.transactionBuffer.size >= this.batchSize;
+    }
+
+    /**
+     * Check if there are transactions in the buffer
+     * @return {boolean}
+     */
+    hasTransactionsInBuffer() {
+        return this.transactionBuffer.size > 0;
+    }
+
+    /**
      * Adds a transaction to the buffer for batch processing
      * @param {Object} tx - The transaction object
      * @param {Object} activeConfig - The active configuration object
      * @return {Promise<void>}
-     * @private
      */
-    async #bufferTransaction(tx, activeConfig) {
+    async bufferTransaction(tx, activeConfig) {
         try {
             if (!tx.hash || !tx.from || tx.blockNumber === null || tx.value === null) {
                 logger.warn(`Transaction ${tx.hash || 'UNKNOWN HASH'} missing essential data. Skipping.`);
@@ -324,9 +144,8 @@ class EthereumService {
     /**
      * Flushes the transaction buffer to the database with retry logic
      * @return {Promise<void>}
-     * @private
      */
-    async #flushTransactionBuffer() {
+    async flushTransactionBuffer() {
         if (this.transactionBuffer.size === 0) return;
 
         logger.debug(`Flushing transaction buffer with ${this.transactionBuffer.size} transactions`);
@@ -368,7 +187,6 @@ class EthereumService {
 
         if (failedTransactions.length > 0) {
             logger.warn(`${failedTransactions.length} transactions failed to save after ${this.maxRetries} retries.`);
-            // failed txs can be re-added to buffer for next attempt if we want
         }
 
         logger.debug(`Flush complete. Saved: ${savedCount}, Failed: ${failedTransactions.length}`);
@@ -376,7 +194,6 @@ class EthereumService {
 
     /**
      * Factory method to create validation rules for a transaction against an active configuration
-     * Currently I don't log the messages, because it's a lot of noise.
      * @param {Object} tx - The transaction object
      * @param {Object} activeConfig - The active configuration object
      * @return {Array<{condition: () => boolean, message: () => string}>}
@@ -432,14 +249,11 @@ class EthereumService {
     }
 
     /**
-     * Shuts down the Ethereum service. Closes the provider, flushes the transaction buffer, and disconnects.
+     * Clean up resources and flush remaining transactions
      * @return {Promise<void>}
      */
     async shutdown() {
-        logger.debug('Shutting down Ethereum Service...');
-        this.isShuttingDown = true;
-
-        this.blockQueue = []; // clear block queue to prevent further processing and race conditions
+        logger.debug('Shutting down TransactionProcessorService...');
         
         if (this.flushTimer) {
             clearInterval(this.flushTimer);
@@ -448,18 +262,9 @@ class EthereumService {
 
         if (this.transactionBuffer.size > 0) {
             logger.debug(`Flushing ${this.transactionBuffer.size} remaining transactions before shutdown.`);
-            await this.#flushTransactionBuffer();
+            await this.flushTransactionBuffer();
         }
-
-        if (this.provider) {
-            logger.debug('Disconnecting from Ethereum provider.');
-            this.provider.removeAllListeners();
-            await this.provider.destroy();
-            this.provider = null;
-        }
-
-        logger.debug('EthereumService shutdown complete.');
     }
 }
 
-export default EthereumService;
+export default TransactionProcessorService; 

@@ -9,6 +9,7 @@ import createConfigsRepository from './repositories/configsRepository.js';
 import dotenv from 'dotenv';
 import createServer from './server.js';
 import ConfigsController from './controllers/configsController.js';
+import logger from './config/winston.js';
 
 dotenv.config();
 
@@ -19,7 +20,7 @@ async function configureContainer() {
 
         await models.Config.sync({ alter: false });
         await models.Transaction.sync({ alter: true });
-        console.log('All models synced successfully.');
+        logger.debug('All models synced successfully.');
 
         const container = createContainer();
 
@@ -45,13 +46,15 @@ async function configureContainer() {
             batchSize: asValue(parseInt(process.env.BATCH_SIZE) || 100),
             flushIntervalMs: asValue(parseInt(process.env.FLUSH_INTERVAL_MS) || 5000),
             maxRetries: asValue(parseInt(process.env.MAX_RETRIES) || 3),
+
+            maxWSSRetries: asValue(parseInt(process.env.MAX_WSS_RETRIES) || 3),
         });
 
-        console.log('Container configured successfully.');
+        logger.debug('Container configured successfully.');
         return container;
 
     } catch (error) {
-        console.error('Failed to configure dependency container:', error);
+        logger.error(`Failed to configure dependency container: ${error.message}\n${error.stack || ''}`);
         throw error; // Re-throw to be caught by index.js
     }
 }

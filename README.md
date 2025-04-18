@@ -18,6 +18,7 @@ Clone the repository and install dependencies:
 
 ```bash
 git clone https://github.com/bongoslav/eth-blockchain-monitor.git
+# or or if you're using SSH - git clone git@github.com:bongoslav/eth-blockchain-monitor.git
 cd eth-blockchain-monitor
 npm install
 ```

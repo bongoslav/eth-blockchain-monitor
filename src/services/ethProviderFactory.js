@@ -10,6 +10,10 @@ class EthereumProviderFactory {
         this.isShuttingDown = false;
     }
 
+    /**
+     * Create the Ethereum provider
+     * @return {Promise<void>}
+     */
     async createProvider() {
         try {
             this.provider = new WebSocketProvider(this.providerUrl);
@@ -25,13 +29,13 @@ class EthereumProviderFactory {
 
             logger.debug('Attempting to reconnect...');
 
-            retryCount++;
+            this.retryCount++;
 
-            logger.warn(`Retrying connection (attempt ${retryCount}/${this.maxWSSRetries})`);
+            logger.warn(`Retrying connection (attempt ${this.retryCount}/${this.maxWSSRetries})`);
 
-            await new Promise(resolve => setTimeout(resolve, 100 * Math.pow(2, retryCount)));
+            await new Promise(resolve => setTimeout(resolve, 100 * Math.pow(2, this.retryCount)));
 
-            if (retryCount >= this.maxWSSRetries) {
+            if (this.retryCount >= this.maxWSSRetries) {
                 logger.error('Failed to reconnect after maximum attempts. Exiting...');
                 await this.shutdown();
                 process.exit(1);
@@ -39,9 +43,18 @@ class EthereumProviderFactory {
 
             await this.createProvider();
         });
+
+        this.retryCount = 0;
     }
     
+    /**
+     * Get the Ethereum provider
+     * @return {WebSocketProvider} The Ethereum provider
+     */
     getProvider() {
+        if (!this.provider) {
+            throw new Error('Provider not initialized. Call createProvider() first.');
+        }
         return this.provider;
     }
 

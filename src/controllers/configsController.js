@@ -94,7 +94,7 @@ class ConfigsController {
 
             const updatedConfig = await this.configsService.updateConfiguration(id, req.body);
             
-            if (currentConfig.active === false && req.body.active === true) {
+            if (currentConfig.active === false && updatedConfig.active === true) {
                 this.blockProcessor?.notifyActiveConfigChanged();
             }
 

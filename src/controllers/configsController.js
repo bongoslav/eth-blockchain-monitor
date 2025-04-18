@@ -53,6 +53,11 @@ class ConfigsController {
             }
 
             const newConfig = await this.configsService.createConfiguration(req.body);
+
+            if (newConfig.active === true) {
+                this.ethereumService?.notifyActiveConfigChanged();
+            }
+
             res.status(201).json(newConfig);
         } catch (error) {
             if (error.name === 'SequelizeUniqueConstraintError') {

@@ -2,14 +2,14 @@
 
 Monitor ethereum transactions based on dynamic configurations.  
 Used packages: express, awilix, ethers, sqlite3, sequelize, joi, winston, nodemon.  
-**_Tested with *Infura* WSS RPC URL on Ethereum Sepolia._**
+**_Tested with *Infura* WebSocket RPC URL on Ethereum Sepolia._**
 
 ## Getting Started
 
 ### Prerequisites
 
 - npm
-- WSS RPC URL
+- WebSocket RPC URL
 
 ### Installation
 
